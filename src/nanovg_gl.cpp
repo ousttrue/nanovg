@@ -12,11 +12,23 @@
 static int glnvg__maxi(int a, int b) { return a > b ? a : b; }
 
 struct GLNVGtexture {
-  int id;
-  GLuint tex;
-  int width, height;
-  int type;
-  int flags;
+
+private:
+  int _id;
+
+public:
+  GLuint tex={};
+  int width={};
+  int height={};
+  int type={};
+  int flags={};
+
+  GLNVGtexture() {
+    static int s_textureId = 0;
+    _id = ++s_textureId;
+  }
+
+  int id() const { return _id; }
 
   // for (i = 0; i < gl->ntextures; i++) {
   //   if (gl->textures[i].tex != 0 &&
@@ -78,7 +90,6 @@ struct GLNVGcontext {
   GLNVGshader shader = {};
   std::unordered_map<int, std::shared_ptr<GLNVGtexture>> textures;
   float view[2] = {};
-  int textureId = {};
   GLuint vertBuf = {};
   GLuint vertArr = {};
   GLuint fragBuf = {};
@@ -113,8 +124,7 @@ public:
 public:
   std::shared_ptr<GLNVGtexture> glnvg__allocTexture() {
     auto tex = std::make_shared<GLNVGtexture>();
-    tex->id = ++textureId;
-    textures.insert(std::make_pair(tex->id, tex));
+    textures.insert(std::make_pair(tex->id(), tex));
     return tex;
   }
 
@@ -304,7 +314,7 @@ static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
   glnvg__checkError(gl, "create tex");
   glnvg__bindTexture(gl, 0);
 
-  return tex->id;
+  return tex->id();
 }
 
 static int glnvg__renderDeleteTexture(void *uptr, int image) {
@@ -1104,7 +1114,7 @@ int nvglCreateImageFromHandleGL3(NVGcontext *ctx, GLuint textureId, int w,
   tex->width = w;
   tex->height = h;
 
-  return tex->id;
+  return tex->id();
 }
 
 GLuint nvglImageHandleGL3(NVGcontext *ctx, int image) {
