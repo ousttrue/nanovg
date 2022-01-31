@@ -5,6 +5,16 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "macro_cutter.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/macro_cutter.py",
+            "args": [
+                "src/nanovg_gl.h"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "example_gl3.exe",
             "type": "cppvsdbg",
             "request": "launch",
