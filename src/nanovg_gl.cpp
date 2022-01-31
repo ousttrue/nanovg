@@ -11,30 +11,136 @@
 
 static int glnvg__maxi(int a, int b) { return a > b ? a : b; }
 
-struct GLNVGtexture {
-
-private:
-  int _id;
-
-public:
-  GLuint tex={};
-  int width={};
-  int height={};
-  int type={};
-  int flags={};
+class GLNVGtexture {
+  int _id = {};
+  GLuint _handle = {};
+  int _width = {};
+  int _height = {};
+  int _type = {};
+  int _flags = {};
 
   GLNVGtexture() {
     static int s_textureId = 0;
     _id = ++s_textureId;
   }
 
-  int id() const { return _id; }
+public:
+  ~GLNVGtexture() {
+    if (_handle != 0 && (_flags & NVG_IMAGE_NODELETE) == 0) {
+      glDeleteTextures(1, &_handle);
+    }
+  }
 
-  // for (i = 0; i < gl->ntextures; i++) {
-  //   if (gl->textures[i].tex != 0 &&
-  //       (gl->textures[i].flags & NVG_IMAGE_NODELETE) == 0)
-  //     glDeleteTextures(1, &gl->textures[i].tex);
-  // }
+  static std::shared_ptr<GLNVGtexture> load(int w, int h, int type,
+                                            const void *data, int imageFlags) {
+    auto tex = std::shared_ptr<GLNVGtexture>(new GLNVGtexture);
+    glGenTextures(1, &tex->_handle);
+    tex->bind();
+    tex->_width = w;
+    tex->_height = h;
+    tex->_type = type;
+    tex->_flags = imageFlags;
+    glBindTexture(GL_TEXTURE_2D, tex->_handle);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, tex->_width);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+
+    if (type == NVG_TEXTURE_RGBA)
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
+                   GL_UNSIGNED_BYTE, data);
+    else
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE,
+                   data);
+
+    if (imageFlags & NVG_IMAGE_GENERATE_MIPMAPS) {
+      if (imageFlags & NVG_IMAGE_NEAREST) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                        GL_NEAREST_MIPMAP_NEAREST);
+      } else {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                        GL_LINEAR_MIPMAP_LINEAR);
+      }
+    } else {
+      if (imageFlags & NVG_IMAGE_NEAREST) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      } else {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      }
+    }
+
+    if (imageFlags & NVG_IMAGE_NEAREST) {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    } else {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
+
+    if (imageFlags & NVG_IMAGE_REPEATX)
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    else
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+
+    if (imageFlags & NVG_IMAGE_REPEATY)
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    else
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+
+    // The new way to build mipmaps on GLES and GL3
+    if (imageFlags & NVG_IMAGE_GENERATE_MIPMAPS) {
+      glGenerateMipmap(GL_TEXTURE_2D);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    tex->unbind();
+    return tex;
+  }
+
+  static std::shared_ptr<GLNVGtexture> fromHandle(GLuint textureId, int w,
+                                                  int h, int imageFlags) {
+    auto tex = std::shared_ptr<GLNVGtexture>(new GLNVGtexture);
+    tex->_type = NVG_TEXTURE_RGBA;
+    tex->_handle = textureId;
+    tex->_flags = imageFlags;
+    tex->_width = w;
+    tex->_height = h;
+    return tex;
+  }
+
+  void update(int x, int y, int w, int h, const void *data) {
+    bind();
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, _width);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, y);
+
+    if (_type == NVG_TEXTURE_RGBA)
+      glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
+                      data);
+    else
+      glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RED, GL_UNSIGNED_BYTE,
+                      data);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+
+    unbind();
+  }
+  GLuint handle() const { return _handle; }
+  void bind() { glBindTexture(GL_TEXTURE_2D, _handle); }
+  void unbind() { glBindTexture(GL_TEXTURE_2D, 0); }
+  int id() const { return _id; }
+  int width() const { return _width; }
+  int height() const { return _height; }
+  int flags() const { return _flags; }
+  int type() const { return _type; }
 };
 
 struct GLNVGblend {
@@ -122,12 +228,6 @@ public:
   int dummyTex;
 
 public:
-  std::shared_ptr<GLNVGtexture> glnvg__allocTexture() {
-    auto tex = std::make_shared<GLNVGtexture>();
-    textures.insert(std::make_pair(tex->id(), tex));
-    return tex;
-  }
-
   std::shared_ptr<GLNVGtexture> glnvg__findTexture(int id) {
     auto found = textures.find(id);
     if (found != textures.end()) {
@@ -238,82 +338,12 @@ static int glnvg__renderCreate(void *uptr) {
 static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
                                       int imageFlags,
                                       const unsigned char *data) {
-  GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  auto tex = gl->glnvg__allocTexture();
-
-  if (!tex)
+  auto gl = (GLNVGcontext *)uptr;
+  auto tex = GLNVGtexture::load(w, h, type, data, imageFlags);
+  if (!tex) {
     return 0;
-
-  glGenTextures(1, &tex->tex);
-  tex->width = w;
-  tex->height = h;
-  tex->type = type;
-  tex->flags = imageFlags;
-  glnvg__bindTexture(gl, tex->tex);
-
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-#ifndef NANOVG_GLES2
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, tex->width);
-  glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
-  glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-#endif
-
-  if (type == NVG_TEXTURE_RGBA)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                 data);
-  else
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE,
-                 data);
-
-  if (imageFlags & NVG_IMAGE_GENERATE_MIPMAPS) {
-    if (imageFlags & NVG_IMAGE_NEAREST) {
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                      GL_NEAREST_MIPMAP_NEAREST);
-    } else {
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                      GL_LINEAR_MIPMAP_LINEAR);
-    }
-  } else {
-    if (imageFlags & NVG_IMAGE_NEAREST) {
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    } else {
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    }
   }
-
-  if (imageFlags & NVG_IMAGE_NEAREST) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  }
-
-  if (imageFlags & NVG_IMAGE_REPEATX)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  else
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-
-  if (imageFlags & NVG_IMAGE_REPEATY)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  else
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-#ifndef NANOVG_GLES2
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-  glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
-  glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-#endif
-
-  // The new way to build mipmaps on GLES and GL3
-#if !defined(NANOVG_GL2)
-  if (imageFlags & NVG_IMAGE_GENERATE_MIPMAPS) {
-    glGenerateMipmap(GL_TEXTURE_2D);
-  }
-#endif
-
-  glnvg__checkError(gl, "create tex");
-  glnvg__bindTexture(gl, 0);
-
+  gl->textures.insert(std::make_pair(tex->id(), tex));
   return tex->id();
 }
 
@@ -324,49 +354,12 @@ static int glnvg__renderDeleteTexture(void *uptr, int image) {
 
 static int glnvg__renderUpdateTexture(void *uptr, int image, int x, int y,
                                       int w, int h, const unsigned char *data) {
-  GLNVGcontext *gl = (GLNVGcontext *)uptr;
+  auto gl = (GLNVGcontext *)uptr;
   auto tex = gl->glnvg__findTexture(image);
   if (!tex)
     return 0;
-  glnvg__bindTexture(gl, tex->tex);
 
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-#ifndef NANOVG_GLES2
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, tex->width);
-  glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
-  glPixelStorei(GL_UNPACK_SKIP_ROWS, y);
-#else
-  // No support for all of skip, need to update a whole row at a time.
-  if (tex->type == NVG_TEXTURE_RGBA)
-    data += y * tex->width * 4;
-  else
-    data += y * tex->width;
-  x = 0;
-  w = tex->width;
-#endif
-
-  if (tex->type == NVG_TEXTURE_RGBA)
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
-                    data);
-  else
-#if defined(NANOVG_GLES2) || defined(NANOVG_GL2)
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_LUMINANCE,
-                    GL_UNSIGNED_BYTE, data);
-#else
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, w, h, GL_RED, GL_UNSIGNED_BYTE,
-                    data);
-#endif
-
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-#ifndef NANOVG_GLES2
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-  glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
-  glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-#endif
-
-  glnvg__bindTexture(gl, 0);
-
+  tex->update(x, y, w, h, data);
   return 1;
 }
 
@@ -375,8 +368,8 @@ static int glnvg__renderGetTextureSize(void *uptr, int image, int *w, int *h) {
   auto tex = gl->glnvg__findTexture(image);
   if (tex == NULL)
     return 0;
-  *w = tex->width;
-  *h = tex->height;
+  *w = tex->width();
+  *h = tex->height();
   return 1;
 }
 
@@ -440,7 +433,7 @@ static int glnvg__convertPaint(GLNVGcontext *gl, GLNVGfragUniforms *frag,
     tex = gl->glnvg__findTexture(paint->image);
     if (tex == NULL)
       return 0;
-    if ((tex->flags & NVG_IMAGE_FLIPY) != 0) {
+    if ((tex->flags() & NVG_IMAGE_FLIPY) != 0) {
       float m1[6], m2[6];
       nvgTransformTranslate(m1, 0.0f, frag->extent[1] * 0.5f);
       nvgTransformMultiply(m1, paint->xform);
@@ -454,8 +447,8 @@ static int glnvg__convertPaint(GLNVGcontext *gl, GLNVGfragUniforms *frag,
     }
     frag->type = NSVG_SHADER_FILLIMG;
 
-    if (tex->type == NVG_TEXTURE_RGBA)
-      frag->texType = (tex->flags & NVG_IMAGE_PREMULTIPLIED) ? 0 : 1;
+    if (tex->type() == NVG_TEXTURE_RGBA)
+      frag->texType = (tex->flags() & NVG_IMAGE_PREMULTIPLIED) ? 0 : 1;
     else
       frag->texType = 2;
     //		printf("frag->texType = %d\n", frag->texType);
@@ -485,7 +478,7 @@ static void glnvg__setUniforms(GLNVGcontext *gl, int uniformOffset, int image) {
   if (tex == NULL) {
     tex = gl->glnvg__findTexture(gl->dummyTex);
   }
-  glnvg__bindTexture(gl, tex != NULL ? tex->tex : 0);
+  glnvg__bindTexture(gl, tex ? tex->handle() : 0);
   glnvg__checkError(gl, "tex paint tex");
 }
 
@@ -1103,22 +1096,16 @@ void nvgDeleteGL3(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
 
 int nvglCreateImageFromHandleGL3(NVGcontext *ctx, GLuint textureId, int w,
                                  int h, int imageFlags) {
-  GLNVGcontext *gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
-  auto tex = gl->glnvg__allocTexture();
-  if (tex == NULL)
+  auto gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
+  auto tex = GLNVGtexture::fromHandle(textureId, w, h, imageFlags);
+  if (!tex)
     return 0;
-
-  tex->type = NVG_TEXTURE_RGBA;
-  tex->tex = textureId;
-  tex->flags = imageFlags;
-  tex->width = w;
-  tex->height = h;
-
+  gl->textures.insert(std::make_pair(tex->id(), tex));
   return tex->id();
 }
 
 GLuint nvglImageHandleGL3(NVGcontext *ctx, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
   auto tex = gl->glnvg__findTexture(image);
-  return tex->tex;
+  return tex->handle();
 }
