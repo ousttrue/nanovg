@@ -30,7 +30,6 @@ struct GLNVGshader {
   GLuint vert;
   GLint loc[GLNVG_MAX_LOCS];
 };
-typedef struct GLNVGshader GLNVGshader;
 
 struct GLNVGtexture {
   int id;
@@ -39,7 +38,6 @@ struct GLNVGtexture {
   int type;
   int flags;
 };
-typedef struct GLNVGtexture GLNVGtexture;
 
 struct GLNVGblend {
   GLenum srcRGB;
@@ -47,7 +45,6 @@ struct GLNVGblend {
   GLenum srcAlpha;
   GLenum dstAlpha;
 };
-typedef struct GLNVGblend GLNVGblend;
 
 enum GLNVGcallType {
   GLNVG_NONE = 0,
@@ -67,7 +64,6 @@ struct GLNVGcall {
   int uniformOffset;
   GLNVGblend blendFunc;
 };
-typedef struct GLNVGcall GLNVGcall;
 
 struct GLNVGpath {
   int fillOffset;
@@ -75,7 +71,6 @@ struct GLNVGpath {
   int strokeOffset;
   int strokeCount;
 };
-typedef struct GLNVGpath GLNVGpath;
 
 struct GLNVGfragUniforms {
   float scissorMat[12]; // matrices are actually 3 vec4s
@@ -92,7 +87,6 @@ struct GLNVGfragUniforms {
   int texType;
   int type;
 };
-typedef struct GLNVGfragUniforms GLNVGfragUniforms;
 
 struct GLNVGcontext {
   GLNVGshader shader;
@@ -131,7 +125,6 @@ struct GLNVGcontext {
 
   int dummyTex;
 };
-typedef struct GLNVGcontext GLNVGcontext;
 
 static int glnvg__maxi(int a, int b) { return a > b ? a : b; }
 
