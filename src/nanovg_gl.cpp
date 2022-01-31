@@ -1,35 +1,11 @@
 #include "nanovg_gl.h"
 #include "nanovg.h"
+#include "nanovg_gl_shader.h"
 #include <glad/glad.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-enum GLNVGuniformLoc {
-  GLNVG_LOC_VIEWSIZE,
-  GLNVG_LOC_TEX,
-  GLNVG_LOC_FRAG,
-  GLNVG_MAX_LOCS
-};
-
-enum GLNVGshaderType {
-  NSVG_SHADER_FILLGRAD,
-  NSVG_SHADER_FILLIMG,
-  NSVG_SHADER_SIMPLE,
-  NSVG_SHADER_IMG
-};
-
-enum GLNVGuniformBindings {
-  GLNVG_FRAG_BINDING = 0,
-};
-
-struct GLNVGshader {
-  GLuint prog;
-  GLuint frag;
-  GLuint vert;
-  GLint loc[GLNVG_MAX_LOCS];
-};
 
 struct GLNVGtexture {
   int id;
@@ -128,19 +104,6 @@ struct GLNVGcontext {
 
 static int glnvg__maxi(int a, int b) { return a > b ? a : b; }
 
-#ifdef NANOVG_GLES2
-static unsigned int glnvg__nearestPow2(unsigned int num) {
-  unsigned n = num > 0 ? num - 1 : 0;
-  n |= n >> 1;
-  n |= n >> 2;
-  n |= n >> 4;
-  n |= n >> 8;
-  n |= n >> 16;
-  n++;
-  return n;
-}
-#endif
-
 static void glnvg__bindTexture(GLNVGcontext *gl, GLuint tex) {
   if (gl->boundTexture != tex) {
     gl->boundTexture = tex;
@@ -232,27 +195,6 @@ static int glnvg__deleteTexture(GLNVGcontext *gl, int id) {
   return 0;
 }
 
-static void glnvg__dumpShaderError(GLuint shader, const char *name,
-                                   const char *type) {
-  GLchar str[512 + 1];
-  GLsizei len = 0;
-  glGetShaderInfoLog(shader, 512, &len, str);
-  if (len > 512)
-    len = 512;
-  str[len] = '\0';
-  printf("Shader %s/%s error:\n%s\n", name, type, str);
-}
-
-static void glnvg__dumpProgramError(GLuint prog, const char *name) {
-  GLchar str[512 + 1];
-  GLsizei len = 0;
-  glGetProgramInfoLog(prog, 512, &len, str);
-  if (len > 512)
-    len = 512;
-  str[len] = '\0';
-  printf("Program %s error:\n%s\n", name, str);
-}
-
 static void glnvg__checkError(GLNVGcontext *gl, const char *str) {
   GLenum err;
   if ((gl->flags & NVG_DEBUG) == 0)
@@ -262,76 +204,6 @@ static void glnvg__checkError(GLNVGcontext *gl, const char *str) {
     printf("Error %08x after %s\n", err, str);
     return;
   }
-}
-
-static int glnvg__createShader(GLNVGshader *shader, const char *name,
-                               const char *header, const char *opts,
-                               const char *vshader, const char *fshader) {
-  GLint status;
-  GLuint prog, vert, frag;
-  const char *str[3];
-  str[0] = header;
-  str[1] = opts != NULL ? opts : "";
-
-  memset(shader, 0, sizeof(*shader));
-
-  prog = glCreateProgram();
-  vert = glCreateShader(GL_VERTEX_SHADER);
-  frag = glCreateShader(GL_FRAGMENT_SHADER);
-  str[2] = vshader;
-  glShaderSource(vert, 3, str, 0);
-  str[2] = fshader;
-  glShaderSource(frag, 3, str, 0);
-
-  glCompileShader(vert);
-  glGetShaderiv(vert, GL_COMPILE_STATUS, &status);
-  if (status != GL_TRUE) {
-    glnvg__dumpShaderError(vert, name, "vert");
-    return 0;
-  }
-
-  glCompileShader(frag);
-  glGetShaderiv(frag, GL_COMPILE_STATUS, &status);
-  if (status != GL_TRUE) {
-    glnvg__dumpShaderError(frag, name, "frag");
-    return 0;
-  }
-
-  glAttachShader(prog, vert);
-  glAttachShader(prog, frag);
-
-  glBindAttribLocation(prog, 0, "vertex");
-  glBindAttribLocation(prog, 1, "tcoord");
-
-  glLinkProgram(prog);
-  glGetProgramiv(prog, GL_LINK_STATUS, &status);
-  if (status != GL_TRUE) {
-    glnvg__dumpProgramError(prog, name);
-    return 0;
-  }
-
-  shader->prog = prog;
-  shader->vert = vert;
-  shader->frag = frag;
-
-  return 1;
-}
-
-static void glnvg__deleteShader(GLNVGshader *shader) {
-  if (shader->prog != 0)
-    glDeleteProgram(shader->prog);
-  if (shader->vert != 0)
-    glDeleteShader(shader->vert);
-  if (shader->frag != 0)
-    glDeleteShader(shader->frag);
-}
-
-static void glnvg__getUniforms(GLNVGshader *shader) {
-  shader->loc[GLNVG_LOC_VIEWSIZE] =
-      glGetUniformLocation(shader->prog, "viewSize");
-  shader->loc[GLNVG_LOC_TEX] = glGetUniformLocation(shader->prog, "tex");
-
-  shader->loc[GLNVG_LOC_FRAG] = glGetUniformBlockIndex(shader->prog, "frag");
 }
 
 static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
@@ -501,26 +373,24 @@ static int glnvg__renderCreate(void *uptr) {
   glnvg__checkError(gl, "init");
 
   if (gl->flags & NVG_ANTIALIAS) {
-    if (glnvg__createShader(&gl->shader, "shader", shaderHeader,
-                            "#define EDGE_AA 1\n", fillVertShader,
-                            fillFragShader) == 0)
+    if (!gl->shader.createShader("shader", shaderHeader, "#define EDGE_AA 1\n",
+                                 fillVertShader, fillFragShader))
       return 0;
   } else {
-    if (glnvg__createShader(&gl->shader, "shader", shaderHeader, NULL,
-                            fillVertShader, fillFragShader) == 0)
+    if (!gl->shader.createShader("shader", shaderHeader, NULL, fillVertShader,
+                                 fillFragShader))
       return 0;
   }
 
   glnvg__checkError(gl, "uniform locations");
-  glnvg__getUniforms(&gl->shader);
+  gl->shader.getUniforms();
 
   // Create dynamic vertex array
   glGenVertexArrays(1, &gl->vertArr);
   glGenBuffers(1, &gl->vertBuf);
 
   // Create UBOs
-  glUniformBlockBinding(gl->shader.prog, gl->shader.loc[GLNVG_LOC_FRAG],
-                        GLNVG_FRAG_BINDING);
+  gl->shader.blockBind();
   glGenBuffers(1, &gl->fragBuf);
   glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &align);
   gl->fragSize =
@@ -1016,7 +886,7 @@ static void glnvg__renderFlush(void *uptr) {
   if (gl->ncalls > 0) {
 
     // Setup require GL state.
-    glUseProgram(gl->shader.prog);
+    gl->shader.use();
 
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
@@ -1058,8 +928,7 @@ static void glnvg__renderFlush(void *uptr) {
                           (const GLvoid *)(0 + 2 * sizeof(float)));
 
     // Set view and texture just once per frame.
-    glUniform1i(gl->shader.loc[GLNVG_LOC_TEX], 0);
-    glUniform2fv(gl->shader.loc[GLNVG_LOC_VIEWSIZE], 1, gl->view);
+    gl->shader.set_texture_and_view(0, gl->view);
 
     glBindBuffer(GL_UNIFORM_BUFFER, gl->fragBuf);
 
@@ -1387,8 +1256,6 @@ static void glnvg__renderDelete(void *uptr) {
   int i;
   if (gl == NULL)
     return;
-
-  glnvg__deleteShader(&gl->shader);
 
   if (gl->fragBuf != 0)
     glDeleteBuffers(1, &gl->fragBuf);
