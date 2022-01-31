@@ -7,37 +7,32 @@ logger = logging.getLogger(__name__)
 MACRO = re.compile(r'#\s*(\w+)(.*)')
 
 
-class Macro(NamedTuple):
-    macro: str
-    arg: str
+class Macro:
+    def __init__(self, start: int, macro: str, arg: str) -> None:
+        self.start = start+1
+        self.macro = macro
+        self.arg = arg
+        self.lines: List[Union[str, 'Scope']] = []
+        #
+        self.end = None
 
     def __str__(self) -> str:
-        return f'[#{self.macro} {self.arg}]'
+        return f'[#{self.macro} {self.arg}, {self.start}: {self.end}]'
+
+    def push(self, end: int, l: Union[str, 'Scope']):
+        self.end = end + 1
+        self.lines.append(l)
 
 
 class Scope:
-    def __init__(self, start: int, defines: List[str], macro: Optional[Macro] = None) -> None:
-        self.start = start+1
-        self.defines = list(defines)
-        self.macros = [macro]
-        #
-        self.lines: List[Union[str, Scope]] = []
-        self.end = None
-        logger.debug(f'enter: {self}')
+    def __init__(self, macro: Macro) -> None:
+        self.macros: List[Macro] = [macro]
 
     def __str__(self) -> str:
-        return f'{", ".join(str(m) for m in self.macros)}: {self.start} to {self.end}'
-
-    def push(self, end: Optional[int] = None, l: Union[str, 'Scope', None] = None):
-        if isinstance(end, int) and l != None:
-            self.end = end + 1
-            self.lines.append(l)
-        else:
-            logger.debug(f'close: {self}')
+        return f'{", ".join(str(m) for m in self.macros)}'
 
     def parse(self, it: Iterator[Tuple[int, str]]):
         # copy
-        defines = list(self.defines)
         while True:
             try:
                 i, l = next(it)
@@ -45,56 +40,56 @@ class Scope:
                 if m:
                     match m.group(1):
                         case 'ifdef':
-                            child = Scope(i, defines, Macro(m.group(1),
+                            child = Scope(Macro(i, m.group(1),
                                           m.group(2).strip()))
-                            self.push(i, child)
+                            self.macros[-1].push(i, child)
                             child.parse(it)
                         case 'ifndef':
-                            child = Scope(i, defines, Macro(m.group(1),
+                            child = Scope(Macro(i, m.group(1),
                                           m.group(2).strip()))
-                            self.push(i, child)
+                            self.macros[-1].push(i, child)
                             child.parse(it)
                         case 'if':
-                            child = Scope(i, defines, Macro(m.group(1),
+                            child = Scope(Macro(i, m.group(1),
                                           m.group(2).strip()))
-                            self.push(i, child)
+                            self.macros[-1].push(i, child)
                             child.parse(it)
                         case 'elif':
                             self.macros.append(
-                                Macro(m.group(1), m.group(2).strip()))
-                            self.push(i, l)
+                                Macro(i, m.group(1), m.group(2).strip()))
+                            self.macros[-1].push(i, l)
                         case 'else':
                             self.macros.append(
-                                Macro(m.group(1), ''))
-                            self.push(i, l)
+                                Macro(i, m.group(1), ''))
+                            self.macros[-1].push(i, l)
                         case 'endif':
-                            self.push(i, l)
+                            self.macros[-1].push(i, l)
                             return
                         case 'define':
-                            self.push(i, l)
-                            defines.append(m.group(2).strip())
+                            self.macros[-1].push(i, l)
                         case 'include':
-                            self.push(i, l)
+                            self.macros[-1].push(i, l)
                         case _:
-                            self.push(i, l)
+                            self.macros[-1].push(i, l)
                 else:
-                    self.push(i, l)
+                    self.macros[-1].push(i, l)
 
             except StopIteration:
                 break
 
-    def print(self, level=0):
+    def print(self, definitions: List[str] = [], *, level=0):
         indent = '  ' * level
         print(f'{indent}{self}')
-        for child in self.lines:
-            match child:
-                case Scope() as scope:
-                    scope.print(level+1)
+        for macro in self.macros:
+            for child in macro.lines:
+                match child:
+                    case Scope() as scope:
+                        scope.print(definitions, level=level+1)
 
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     text = pathlib.Path(sys.argv[1]).read_text()
-    root = Scope(0, [])
+    root = Scope(Macro(0, '', ''))
     root.parse(enumerate(text.splitlines()))
-    root.print()
+    root.print(['NANOVG_GL2_IMPLEMENTATION'])
