@@ -1,16 +1,10 @@
 #include "nanovg_gl.h"
-#include <glad/glad.h>
-
 #include "nanovg.h"
+#include <glad/glad.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define NANOVG_GL3 1
-#define NANOVG_GL_IMPLEMENTATION 1
-#define NANOVG_GL_USE_UNIFORMBUFFER 1
-#define NANOVG_GL_USE_STATE_FILTER (1)
 
 enum GLNVGuniformLoc {
   GLNVG_LOC_VIEWSIZE,
@@ -26,11 +20,9 @@ enum GLNVGshaderType {
   NSVG_SHADER_IMG
 };
 
-#if NANOVG_GL_USE_UNIFORMBUFFER
 enum GLNVGuniformBindings {
   GLNVG_FRAG_BINDING = 0,
 };
-#endif
 
 struct GLNVGshader {
   GLuint prog;
@@ -86,7 +78,6 @@ struct GLNVGpath {
 typedef struct GLNVGpath GLNVGpath;
 
 struct GLNVGfragUniforms {
-#if NANOVG_GL_USE_UNIFORMBUFFER
   float scissorMat[12]; // matrices are actually 3 vec4s
   float paintMat[12];
   struct NVGcolor innerCol;
@@ -100,29 +91,6 @@ struct GLNVGfragUniforms {
   float strokeThr;
   int texType;
   int type;
-#else
-// note: after modifying layout or size of uniform array,
-// don't forget to also update the fragment shader source!
-#define NANOVG_GL_UNIFORMARRAY_SIZE 11
-  union {
-    struct {
-      float scissorMat[12]; // matrices are actually 3 vec4s
-      float paintMat[12];
-      struct NVGcolor innerCol;
-      struct NVGcolor outerCol;
-      float scissorExt[2];
-      float scissorScale[2];
-      float extent[2];
-      float radius;
-      float feather;
-      float strokeMult;
-      float strokeThr;
-      float texType;
-      float type;
-    };
-    float uniformArray[NANOVG_GL_UNIFORMARRAY_SIZE][4];
-  };
-#endif
 };
 typedef struct GLNVGfragUniforms GLNVGfragUniforms;
 
@@ -134,12 +102,8 @@ struct GLNVGcontext {
   int ctextures;
   int textureId;
   GLuint vertBuf;
-#if defined NANOVG_GL3
   GLuint vertArr;
-#endif
-#if NANOVG_GL_USE_UNIFORMBUFFER
   GLuint fragBuf;
-#endif
   int fragSize;
   int flags;
 
@@ -157,15 +121,13 @@ struct GLNVGcontext {
   int cuniforms;
   int nuniforms;
 
-// cached state
-#if NANOVG_GL_USE_STATE_FILTER
+  // cached state
   GLuint boundTexture;
   GLuint stencilMask;
   GLenum stencilFunc;
   GLint stencilFuncRef;
   GLuint stencilFuncMask;
   GLNVGblend blendFunc;
-#endif
 
   int dummyTex;
 };
@@ -187,30 +149,21 @@ static unsigned int glnvg__nearestPow2(unsigned int num) {
 #endif
 
 static void glnvg__bindTexture(GLNVGcontext *gl, GLuint tex) {
-#if NANOVG_GL_USE_STATE_FILTER
   if (gl->boundTexture != tex) {
     gl->boundTexture = tex;
     glBindTexture(GL_TEXTURE_2D, tex);
   }
-#else
-  glBindTexture(GL_TEXTURE_2D, tex);
-#endif
 }
 
 static void glnvg__stencilMask(GLNVGcontext *gl, GLuint mask) {
-#if NANOVG_GL_USE_STATE_FILTER
   if (gl->stencilMask != mask) {
     gl->stencilMask = mask;
     glStencilMask(mask);
   }
-#else
-  glStencilMask(mask);
-#endif
 }
 
 static void glnvg__stencilFunc(GLNVGcontext *gl, GLenum func, GLint ref,
                                GLuint mask) {
-#if NANOVG_GL_USE_STATE_FILTER
   if ((gl->stencilFunc != func) || (gl->stencilFuncRef != ref) ||
       (gl->stencilFuncMask != mask)) {
 
@@ -219,13 +172,9 @@ static void glnvg__stencilFunc(GLNVGcontext *gl, GLenum func, GLint ref,
     gl->stencilFuncMask = mask;
     glStencilFunc(func, ref, mask);
   }
-#else
-  glStencilFunc(func, ref, mask);
-#endif
 }
 static void glnvg__blendFuncSeparate(GLNVGcontext *gl,
                                      const GLNVGblend *blend) {
-#if NANOVG_GL_USE_STATE_FILTER
   if ((gl->blendFunc.srcRGB != blend->srcRGB) ||
       (gl->blendFunc.dstRGB != blend->dstRGB) ||
       (gl->blendFunc.srcAlpha != blend->srcAlpha) ||
@@ -235,10 +184,6 @@ static void glnvg__blendFuncSeparate(GLNVGcontext *gl,
     glBlendFuncSeparate(blend->srcRGB, blend->dstRGB, blend->srcAlpha,
                         blend->dstAlpha);
   }
-#else
-  glBlendFuncSeparate(blend->srcRGB, blend->dstRGB, blend->srcAlpha,
-                      blend->dstAlpha);
-#endif
 }
 
 static GLNVGtexture *glnvg__allocTexture(GLNVGcontext *gl) {
@@ -393,11 +338,7 @@ static void glnvg__getUniforms(GLNVGshader *shader) {
       glGetUniformLocation(shader->prog, "viewSize");
   shader->loc[GLNVG_LOC_TEX] = glGetUniformLocation(shader->prog, "tex");
 
-#if NANOVG_GL_USE_UNIFORMBUFFER
   shader->loc[GLNVG_LOC_FRAG] = glGetUniformBlockIndex(shader->prog, "frag");
-#else
-  shader->loc[GLNVG_LOC_FRAG] = glGetUniformLocation(shader->prog, "frag");
-#endif
 }
 
 static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
@@ -410,26 +351,11 @@ static int glnvg__renderCreate(void *uptr) {
 
   // TODO: mediump float may not be enough for GLES2 in iOS.
   // see the following discussion: https://github.com/memononen/nanovg/issues/46
-  static const char *shaderHeader =
-#if defined NANOVG_GL2
-      "#define NANOVG_GL2 1\n"
-#elif defined NANOVG_GL3
-      "#version 150 core\n"
-      "#define NANOVG_GL3 1\n"
-#elif defined NANOVG_GLES2
-      "#version 100\n"
-      "#define NANOVG_GL2 1\n"
-#elif defined NANOVG_GLES3
-      "#version 300 es\n"
-      "#define NANOVG_GL3 1\n"
-#endif
+  static const char *shaderHeader = "#version 150 core\n"
+                                    "#define NANOVG_GL3 1\n"
 
-#if NANOVG_GL_USE_UNIFORMBUFFER
-      "#define USE_UNIFORMBUFFER 1\n"
-#else
-      "#define UNIFORMARRAY_SIZE 11\n"
-#endif
-      "\n";
+                                    "#define USE_UNIFORMBUFFER 1\n"
+                                    "\n";
 
   static const char *fillVertShader =
       "#ifdef NANOVG_GL3\n"
@@ -596,18 +522,14 @@ static int glnvg__renderCreate(void *uptr) {
   glnvg__getUniforms(&gl->shader);
 
   // Create dynamic vertex array
-#if defined NANOVG_GL3
   glGenVertexArrays(1, &gl->vertArr);
-#endif
   glGenBuffers(1, &gl->vertBuf);
 
-#if NANOVG_GL_USE_UNIFORMBUFFER
   // Create UBOs
   glUniformBlockBinding(gl->shader.prog, gl->shader.loc[GLNVG_LOC_FRAG],
                         GLNVG_FRAG_BINDING);
   glGenBuffers(1, &gl->fragBuf);
   glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &align);
-#endif
   gl->fragSize =
       sizeof(GLNVGfragUniforms) + align - sizeof(GLNVGfragUniforms) % align;
 
@@ -880,17 +802,10 @@ static int glnvg__convertPaint(GLNVGcontext *gl, GLNVGfragUniforms *frag,
     }
     frag->type = NSVG_SHADER_FILLIMG;
 
-#if NANOVG_GL_USE_UNIFORMBUFFER
     if (tex->type == NVG_TEXTURE_RGBA)
       frag->texType = (tex->flags & NVG_IMAGE_PREMULTIPLIED) ? 0 : 1;
     else
       frag->texType = 2;
-#else
-    if (tex->type == NVG_TEXTURE_RGBA)
-      frag->texType = (tex->flags & NVG_IMAGE_PREMULTIPLIED) ? 0.0f : 1.0f;
-    else
-      frag->texType = 2.0f;
-#endif
     //		printf("frag->texType = %d\n", frag->texType);
   } else {
     frag->type = NSVG_SHADER_FILLGRAD;
@@ -908,14 +823,8 @@ static GLNVGfragUniforms *nvg__fragUniformPtr(GLNVGcontext *gl, int i);
 
 static void glnvg__setUniforms(GLNVGcontext *gl, int uniformOffset, int image) {
   GLNVGtexture *tex = NULL;
-#if NANOVG_GL_USE_UNIFORMBUFFER
   glBindBufferRange(GL_UNIFORM_BUFFER, GLNVG_FRAG_BINDING, gl->fragBuf,
                     uniformOffset, sizeof(GLNVGfragUniforms));
-#else
-  GLNVGfragUniforms *frag = nvg__fragUniformPtr(gl, uniformOffset);
-  glUniform4fv(gl->shader.loc[GLNVG_LOC_FRAG], NANOVG_GL_UNIFORMARRAY_SIZE,
-               &(frag->uniformArray[0][0]));
-#endif
 
   if (image != 0) {
     tex = glnvg__findTexture(gl, image);
@@ -1035,7 +944,8 @@ static void glnvg__stroke(GLNVGcontext *gl, GLNVGcall *call) {
 
     glDisable(GL_STENCIL_TEST);
 
-    //		glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call->uniformOffset
+    //		glnvg__convertPaint(gl, nvg__fragUniformPtr(gl,
+    // call->uniformOffset
     //+ gl->fragSize), paint, scissor, strokeWidth, fringe, 1.0f - 0.5f/255.0f);
 
   } else {
@@ -1127,7 +1037,6 @@ static void glnvg__renderFlush(void *uptr) {
     glStencilFunc(GL_ALWAYS, 0, 0xffffffff);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
-#if NANOVG_GL_USE_STATE_FILTER
     gl->boundTexture = 0;
     gl->stencilMask = 0xffffffff;
     gl->stencilFunc = GL_ALWAYS;
@@ -1137,19 +1046,14 @@ static void glnvg__renderFlush(void *uptr) {
     gl->blendFunc.srcAlpha = GL_INVALID_ENUM;
     gl->blendFunc.dstRGB = GL_INVALID_ENUM;
     gl->blendFunc.dstAlpha = GL_INVALID_ENUM;
-#endif
 
-#if NANOVG_GL_USE_UNIFORMBUFFER
     // Upload ubo for frag shaders
     glBindBuffer(GL_UNIFORM_BUFFER, gl->fragBuf);
     glBufferData(GL_UNIFORM_BUFFER, gl->nuniforms * gl->fragSize, gl->uniforms,
                  GL_STREAM_DRAW);
-#endif
 
     // Upload vertex data
-#if defined NANOVG_GL3
     glBindVertexArray(gl->vertArr);
-#endif
     glBindBuffer(GL_ARRAY_BUFFER, gl->vertBuf);
     glBufferData(GL_ARRAY_BUFFER, gl->nverts * sizeof(NVGvertex), gl->verts,
                  GL_STREAM_DRAW);
@@ -1164,9 +1068,7 @@ static void glnvg__renderFlush(void *uptr) {
     glUniform1i(gl->shader.loc[GLNVG_LOC_TEX], 0);
     glUniform2fv(gl->shader.loc[GLNVG_LOC_VIEWSIZE], 1, gl->view);
 
-#if NANOVG_GL_USE_UNIFORMBUFFER
     glBindBuffer(GL_UNIFORM_BUFFER, gl->fragBuf);
-#endif
 
     for (i = 0; i < gl->ncalls; i++) {
       GLNVGcall *call = &gl->calls[i];
@@ -1183,9 +1085,7 @@ static void glnvg__renderFlush(void *uptr) {
 
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
-#if defined NANOVG_GL3
     glBindVertexArray(0);
-#endif
     glDisable(GL_CULL_FACE);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glUseProgram(0);
@@ -1497,14 +1397,10 @@ static void glnvg__renderDelete(void *uptr) {
 
   glnvg__deleteShader(&gl->shader);
 
-#if NANOVG_GL3
-#if NANOVG_GL_USE_UNIFORMBUFFER
   if (gl->fragBuf != 0)
     glDeleteBuffers(1, &gl->fragBuf);
-#endif
   if (gl->vertArr != 0)
     glDeleteVertexArrays(1, &gl->vertArr);
-#endif
   if (gl->vertBuf != 0)
     glDeleteBuffers(1, &gl->vertBuf);
 
@@ -1523,16 +1419,7 @@ static void glnvg__renderDelete(void *uptr) {
   free(gl);
 }
 
-#if defined NANOVG_GL2
-NVGcontext *nvgCreateGL2(int flags)
-#elif defined NANOVG_GL3
-NVGcontext *nvgCreateGL3(int flags)
-#elif defined NANOVG_GLES2
-NVGcontext *nvgCreateGLES2(int flags)
-#elif defined NANOVG_GLES3
-NVGcontext *nvgCreateGLES3(int flags)
-#endif
-{
+NVGcontext *nvgCreateGL3(int flags) {
   NVGparams params;
   NVGcontext *ctx = NULL;
   GLNVGcontext *gl = (GLNVGcontext *)malloc(sizeof(GLNVGcontext));
@@ -1571,33 +1458,10 @@ error:
   return NULL;
 }
 
-#if defined NANOVG_GL2
-void nvgDeleteGL2(NVGcontext *ctx)
-#elif defined NANOVG_GL3
-void nvgDeleteGL3(NVGcontext *ctx)
-#elif defined NANOVG_GLES2
-void nvgDeleteGLES2(NVGcontext *ctx)
-#elif defined NANOVG_GLES3
-void nvgDeleteGLES3(NVGcontext *ctx)
-#endif
-{
-  nvgDeleteInternal(ctx);
-}
+void nvgDeleteGL3(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
 
-#if defined NANOVG_GL2
-int nvglCreateImageFromHandleGL2(NVGcontext *ctx, GLuint textureId, int w,
-                                 int h, int imageFlags)
-#elif defined NANOVG_GL3
 int nvglCreateImageFromHandleGL3(NVGcontext *ctx, GLuint textureId, int w,
-                                 int h, int imageFlags)
-#elif defined NANOVG_GLES2
-int nvglCreateImageFromHandleGLES2(NVGcontext *ctx, GLuint textureId, int w,
-                                   int h, int imageFlags)
-#elif defined NANOVG_GLES3
-int nvglCreateImageFromHandleGLES3(NVGcontext *ctx, GLuint textureId, int w,
-                                   int h, int imageFlags)
-#endif
-{
+                                 int h, int imageFlags) {
   GLNVGcontext *gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
   GLNVGtexture *tex = glnvg__allocTexture(gl);
 
@@ -1613,16 +1477,7 @@ int nvglCreateImageFromHandleGLES3(NVGcontext *ctx, GLuint textureId, int w,
   return tex->id;
 }
 
-#if defined NANOVG_GL2
-GLuint nvglImageHandleGL2(NVGcontext *ctx, int image)
-#elif defined NANOVG_GL3
-GLuint nvglImageHandleGL3(NVGcontext *ctx, int image)
-#elif defined NANOVG_GLES2
-GLuint nvglImageHandleGLES2(NVGcontext *ctx, int image)
-#elif defined NANOVG_GLES3
-GLuint nvglImageHandleGLES3(NVGcontext *ctx, int image)
-#endif
-{
+GLuint nvglImageHandleGL3(NVGcontext *ctx, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
   GLNVGtexture *tex = glnvg__findTexture(gl, image);
   return tex->tex;
