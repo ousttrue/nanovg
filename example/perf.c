@@ -5,6 +5,7 @@
 #ifdef NANOVG_GLEW
 #  include <GL/glew.h>
 #endif
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "nanovg.h"
 

@@ -23,7 +23,7 @@
 #ifdef __APPLE__
 #	define GLFW_INCLUDE_GLCOREARB
 #endif
-#define GLFW_INCLUDE_GLEXT
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "nanovg.h"
 #define NANOVG_GL3_IMPLEMENTATION
@@ -95,6 +95,7 @@ int main()
 	glfwSetKeyCallback(window, key);
 
 	glfwMakeContextCurrent(window);
+	gladLoadGL(glfwGetProcAddress);
 #ifdef NANOVG_GLEW
 	glewExperimental = GL_TRUE;
 	if(glewInit() != GLEW_OK) {
