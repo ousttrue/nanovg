@@ -1,11 +1,16 @@
-#include <glad/glad.h>
 #include "nanovg_gl.h"
+#include <glad/glad.h>
 
 #include "nanovg.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define NANOVG_GL3 1
+#define NANOVG_GL_IMPLEMENTATION 1
+#define NANOVG_GL_USE_UNIFORMBUFFER 1
+#define NANOVG_GL_USE_STATE_FILTER (1)
 
 enum GLNVGuniformLoc {
   GLNVG_LOC_VIEWSIZE,
@@ -1030,8 +1035,8 @@ static void glnvg__stroke(GLNVGcontext *gl, GLNVGcall *call) {
 
     glDisable(GL_STENCIL_TEST);
 
-    //		glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call->uniformOffset +
-    //gl->fragSize), paint, scissor, strokeWidth, fringe, 1.0f - 0.5f/255.0f);
+    //		glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call->uniformOffset
+    //+ gl->fragSize), paint, scissor, strokeWidth, fringe, 1.0f - 0.5f/255.0f);
 
   } else {
     glnvg__setUniforms(gl, call->uniformOffset, call->image);

@@ -16,7 +16,9 @@
 // 3. This notice may not be removed or altered from any source distribution.
 //
 #pragma once
-#include "nanovg.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Create flags
 
@@ -33,21 +35,20 @@ enum NVGcreateFlags {
   NVG_DEBUG = 1 << 2,
 };
 
-#define NANOVG_GL3 1
-#define NANOVG_GL_IMPLEMENTATION 1
-#define NANOVG_GL_USE_UNIFORMBUFFER 1
-#define NANOVG_GL_USE_STATE_FILTER (1)
-
 // Creates NanoVG contexts for different OpenGL (ES) versions.
 // Flags should be combination of the create flags above.
-NVGcontext *nvgCreateGL3(int flags);
+struct NVGcontext *nvgCreateGL3(int flags);
 void nvgDeleteGL3(NVGcontext *ctx);
 
-int nvglCreateImageFromHandleGL3(NVGcontext *ctx, GLuint textureId, int w,
+int nvglCreateImageFromHandleGL3(NVGcontext *ctx, unsigned int textureId, int w,
                                  int h, int flags);
-GLuint nvglImageHandleGL3(NVGcontext *ctx, int image);
+unsigned int nvglImageHandleGL3(NVGcontext *ctx, int image);
 
 // These are additional flags on top of NVGimageFlags.
 enum NVGimageFlagsGL {
   NVG_IMAGE_NODELETE = 1 << 16, // Do not delete GL texture handle.
 };
+
+#ifdef __cplusplus
+}
+#endif
