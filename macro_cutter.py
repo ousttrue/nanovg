@@ -8,17 +8,12 @@ logger = logging.getLogger(__name__)
 MACRO = re.compile(r'#\s*(\w+)(.*)')
 
 
-class Definition(NamedTuple):
-    name: str
-    value: str
-
-
 class Macro:
     def __init__(self, start: int, macro: str, arg: str) -> None:
         self.start = start+1
         self.macro = macro
         self.arg = arg
-        self.lines: List[Union[str, 'Scope', Definition]] = []
+        self.lines: List[Union[str, 'Scope', 'Macro']] = []
         #
         self.end = -1
 
@@ -30,6 +25,10 @@ class Macro:
             case 'if' | 'elif':
                 if self.arg.startswith('defined '):
                     target = self.arg[8:].strip()
+                    if target in definitions:
+                        return True
+                else:
+                    target = self.arg.strip()
                     if target in definitions:
                         return True
                 return False
@@ -57,7 +56,7 @@ class Scope:
     def __init__(self, macro: Macro) -> None:
         self.macros: List[Macro] = [macro]
 
-    def push(self, end: int, l: Union[str, 'Scope', Definition, None] = None):
+    def push(self, end: int, l: Union[str, 'Scope', 'Macro', None] = None):
         macro = self.macros[-1]
         macro.end = end + 1
         if l != None:
@@ -95,13 +94,11 @@ class Scope:
                                 Macro(i, m.group(1), ''))
                             self.push(i)
                         case 'endif':
-                            self.push(i)
+                            self.push(i, Macro(i, 'endif', ''))
                             return
                         case 'define':
-                            # self.push(i, l)
-                            splitted = m.group(2).strip().split(maxsplit=1)
-                            self.push(i,
-                                      Definition(splitted[0], ''))
+                            self.push(
+                                i, Macro(i, m.group(1), m.group(2).strip()))
                         case 'include':
                             self.push(i, l)
                         case _:
@@ -112,22 +109,40 @@ class Scope:
             except StopIteration:
                 break
 
-    def write_to(self, w: io.IOBase, definitions: List[str] = [], *, level=0):
-        indent = '  ' * level
-        any_prev = False
+    def do_resolve(self, definitions: List[str]):
         for macro in self.macros:
-            if not macro.is_enable(definitions, any_prev):
-                # logging.debug(f'disable: {macro}: {definitions}')
-                continue
-            any_prev = True
-            for child in macro.lines:
+            for d in definitions:
+                if d in macro.arg:
+                    return True
+
+    def write_to(self, w: io.IOBase, definitions: List[str] = [], *, level=0):
+        # indent = '  ' * level
+        any_prev = False
+
+        resolve = self.do_resolve(definitions)
+        for d in self.macros:
+            if resolve:
+                if not d.is_enable(definitions, any_prev):
+                    # logging.debug(f'disable: {macro}: {definitions}')
+                    continue
+                any_prev = True
+            else:
+                if d.macro:
+                    w.write(f'#{d.macro} {d.arg}\n')
+            for child in d.lines:
                 match child:
                     case Scope() as scope:
                         scope.write_to(w, definitions, level=level+1)
 
-                    case Definition() as d:
-                        logger.debug(d)
-                        definitions.append(d.name)
+                    case Macro() as d:
+                        # logger.debug(d)
+                        if d.macro == 'endif' and resolve:
+                            continue
+
+                        w.write(f'#{d.macro} {d.arg}\n')
+                        if d.macro == 'define':
+                            splitted = d.arg.split(maxsplit=1)
+                            definitions.append(splitted[0])
 
                     case str() as l:
                         w.write(l)
