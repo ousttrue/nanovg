@@ -28,8 +28,7 @@ class GLNVGshader {
 public:
   ~GLNVGshader();
   void use();
-  bool createShader(const char *name, const char *header, const char *opts,
-                    const char *vshader, const char *fshader);
+  bool createShader(bool useAntiAlias);
   void getUniforms();
   void blockBind();
   void set_texture_and_view(int texture, const float view[2]);
