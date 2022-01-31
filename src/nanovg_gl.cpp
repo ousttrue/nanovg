@@ -3,9 +3,13 @@
 #include "nanovg_gl_shader.h"
 #include <glad/glad.h>
 #include <math.h>
+#include <memory>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unordered_map>
+
+static int glnvg__maxi(int a, int b) { return a > b ? a : b; }
 
 struct GLNVGtexture {
   int id;
@@ -13,6 +17,12 @@ struct GLNVGtexture {
   int width, height;
   int type;
   int flags;
+
+  // for (i = 0; i < gl->ntextures; i++) {
+  //   if (gl->textures[i].tex != 0 &&
+  //       (gl->textures[i].flags & NVG_IMAGE_NODELETE) == 0)
+  //     glDeleteTextures(1, &gl->textures[i].tex);
+  // }
 };
 
 struct GLNVGblend {
@@ -65,32 +75,31 @@ struct GLNVGfragUniforms {
 };
 
 struct GLNVGcontext {
-  GLNVGshader shader;
-  GLNVGtexture *textures;
-  float view[2];
-  int ntextures;
-  int ctextures;
-  int textureId;
-  GLuint vertBuf;
-  GLuint vertArr;
-  GLuint fragBuf;
-  int fragSize;
-  int flags;
+  GLNVGshader shader = {};
+  std::unordered_map<int, std::shared_ptr<GLNVGtexture>> textures;
+  float view[2] = {};
+  int textureId = {};
+  GLuint vertBuf = {};
+  GLuint vertArr = {};
+  GLuint fragBuf = {};
+  int fragSize = {};
+  int flags = {};
 
   // Per frame buffers
-  GLNVGcall *calls;
-  int ccalls;
-  int ncalls;
-  GLNVGpath *paths;
-  int cpaths;
-  int npaths;
-  struct NVGvertex *verts;
-  int cverts;
-  int nverts;
-  unsigned char *uniforms;
-  int cuniforms;
-  int nuniforms;
+  GLNVGcall *calls = {};
+  int ccalls = {};
+  int ncalls = {};
+  GLNVGpath *paths = {};
+  int cpaths = {};
+  int npaths = {};
+  struct NVGvertex *verts = {};
+  int cverts = {};
+  int nverts = {};
+  unsigned char *uniforms = {};
+  int cuniforms = {};
+  int nuniforms = {};
 
+public:
   // cached state
   GLuint boundTexture;
   GLuint stencilMask;
@@ -100,9 +109,32 @@ struct GLNVGcontext {
   GLNVGblend blendFunc;
 
   int dummyTex;
-};
 
-static int glnvg__maxi(int a, int b) { return a > b ? a : b; }
+public:
+  std::shared_ptr<GLNVGtexture> glnvg__allocTexture() {
+    auto tex = std::make_shared<GLNVGtexture>();
+    tex->id = ++textureId;
+    textures.insert(std::make_pair(tex->id, tex));
+    return tex;
+  }
+
+  std::shared_ptr<GLNVGtexture> glnvg__findTexture(int id) {
+    auto found = textures.find(id);
+    if (found != textures.end()) {
+      return found->second;
+    }
+    return {};
+  }
+
+  bool glnvg__deleteTexture(int id) {
+    auto found = textures.find(id);
+    if (found != textures.end()) {
+      textures.erase(found);
+      return true;
+    }
+    return false;
+  }
+};
 
 static void glnvg__bindTexture(GLNVGcontext *gl, GLuint tex) {
   if (gl->boundTexture != tex) {
@@ -140,59 +172,6 @@ static void glnvg__blendFuncSeparate(GLNVGcontext *gl,
     glBlendFuncSeparate(blend->srcRGB, blend->dstRGB, blend->srcAlpha,
                         blend->dstAlpha);
   }
-}
-
-static GLNVGtexture *glnvg__allocTexture(GLNVGcontext *gl) {
-  GLNVGtexture *tex = NULL;
-  int i;
-
-  for (i = 0; i < gl->ntextures; i++) {
-    if (gl->textures[i].id == 0) {
-      tex = &gl->textures[i];
-      break;
-    }
-  }
-  if (tex == NULL) {
-    if (gl->ntextures + 1 > gl->ctextures) {
-      GLNVGtexture *textures;
-      int ctextures = glnvg__maxi(gl->ntextures + 1, 4) +
-                      gl->ctextures / 2; // 1.5x Overallocate
-      textures = (GLNVGtexture *)realloc(gl->textures,
-                                         sizeof(GLNVGtexture) * ctextures);
-      if (textures == NULL)
-        return NULL;
-      gl->textures = textures;
-      gl->ctextures = ctextures;
-    }
-    tex = &gl->textures[gl->ntextures++];
-  }
-
-  memset(tex, 0, sizeof(*tex));
-  tex->id = ++gl->textureId;
-
-  return tex;
-}
-
-static GLNVGtexture *glnvg__findTexture(GLNVGcontext *gl, int id) {
-  int i;
-  for (i = 0; i < gl->ntextures; i++)
-    if (gl->textures[i].id == id)
-      return &gl->textures[i];
-  return NULL;
-}
-
-static int glnvg__deleteTexture(GLNVGcontext *gl, int id) {
-  int i;
-  for (i = 0; i < gl->ntextures; i++) {
-    if (gl->textures[i].id == id) {
-      if (gl->textures[i].tex != 0 &&
-          (gl->textures[i].flags & NVG_IMAGE_NODELETE) == 0)
-        glDeleteTextures(1, &gl->textures[i].tex);
-      memset(&gl->textures[i], 0, sizeof(gl->textures[i]));
-      return 1;
-    }
-  }
-  return 0;
 }
 
 static void glnvg__checkError(GLNVGcontext *gl, const char *str) {
@@ -250,32 +229,10 @@ static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
                                       int imageFlags,
                                       const unsigned char *data) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  GLNVGtexture *tex = glnvg__allocTexture(gl);
+  auto tex = gl->glnvg__allocTexture();
 
-  if (tex == NULL)
+  if (!tex)
     return 0;
-
-#ifdef NANOVG_GLES2
-  // Check for non-power of 2.
-  if (glnvg__nearestPow2(w) != (unsigned int)w ||
-      glnvg__nearestPow2(h) != (unsigned int)h) {
-    // No repeat
-    if ((imageFlags & NVG_IMAGE_REPEATX) != 0 ||
-        (imageFlags & NVG_IMAGE_REPEATY) != 0) {
-      printf("Repeat X/Y is not supported for non power-of-two textures (%d x "
-             "%d)\n",
-             w, h);
-      imageFlags &= ~(NVG_IMAGE_REPEATX | NVG_IMAGE_REPEATY);
-    }
-    // No mips.
-    if (imageFlags & NVG_IMAGE_GENERATE_MIPMAPS) {
-      printf(
-          "Mip-maps is not support for non power-of-two textures (%d x %d)\n",
-          w, h);
-      imageFlags &= ~NVG_IMAGE_GENERATE_MIPMAPS;
-    }
-  }
-#endif
 
   glGenTextures(1, &tex->tex);
   tex->width = w;
@@ -291,27 +248,12 @@ static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
   glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
 #endif
 
-#if defined(NANOVG_GL2)
-  // GL 1.4 and later has support for generating mipmaps using a tex parameter.
-  if (imageFlags & NVG_IMAGE_GENERATE_MIPMAPS) {
-    glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
-  }
-#endif
-
   if (type == NVG_TEXTURE_RGBA)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                  data);
   else
-#if defined(NANOVG_GLES2) || defined(NANOVG_GL2)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, w, h, 0, GL_LUMINANCE,
-                 GL_UNSIGNED_BYTE, data);
-#elif defined(NANOVG_GLES3)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, w, h, 0, GL_RED, GL_UNSIGNED_BYTE,
-                 data);
-#else
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, w, h, 0, GL_RED, GL_UNSIGNED_BYTE,
                  data);
-#endif
 
   if (imageFlags & NVG_IMAGE_GENERATE_MIPMAPS) {
     if (imageFlags & NVG_IMAGE_NEAREST) {
@@ -367,15 +309,14 @@ static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
 
 static int glnvg__renderDeleteTexture(void *uptr, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  return glnvg__deleteTexture(gl, image);
+  return gl->glnvg__deleteTexture(image);
 }
 
 static int glnvg__renderUpdateTexture(void *uptr, int image, int x, int y,
                                       int w, int h, const unsigned char *data) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  GLNVGtexture *tex = glnvg__findTexture(gl, image);
-
-  if (tex == NULL)
+  auto tex = gl->glnvg__findTexture(image);
+  if (!tex)
     return 0;
   glnvg__bindTexture(gl, tex->tex);
 
@@ -421,7 +362,7 @@ static int glnvg__renderUpdateTexture(void *uptr, int image, int x, int y,
 
 static int glnvg__renderGetTextureSize(void *uptr, int image, int *w, int *h) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  GLNVGtexture *tex = glnvg__findTexture(gl, image);
+  auto tex = gl->glnvg__findTexture(image);
   if (tex == NULL)
     return 0;
   *w = tex->width;
@@ -454,7 +395,7 @@ static NVGcolor glnvg__premulColor(NVGcolor c) {
 static int glnvg__convertPaint(GLNVGcontext *gl, GLNVGfragUniforms *frag,
                                NVGpaint *paint, NVGscissor *scissor,
                                float width, float fringe, float strokeThr) {
-  GLNVGtexture *tex = NULL;
+  std::shared_ptr<GLNVGtexture> tex = NULL;
   float invxform[6];
 
   memset(frag, 0, sizeof(*frag));
@@ -486,7 +427,7 @@ static int glnvg__convertPaint(GLNVGcontext *gl, GLNVGfragUniforms *frag,
   frag->strokeThr = strokeThr;
 
   if (paint->image != 0) {
-    tex = glnvg__findTexture(gl, paint->image);
+    tex = gl->glnvg__findTexture(paint->image);
     if (tex == NULL)
       return 0;
     if ((tex->flags & NVG_IMAGE_FLIPY) != 0) {
@@ -523,16 +464,16 @@ static int glnvg__convertPaint(GLNVGcontext *gl, GLNVGfragUniforms *frag,
 static GLNVGfragUniforms *nvg__fragUniformPtr(GLNVGcontext *gl, int i);
 
 static void glnvg__setUniforms(GLNVGcontext *gl, int uniformOffset, int image) {
-  GLNVGtexture *tex = NULL;
+  std::shared_ptr<GLNVGtexture> tex = NULL;
   glBindBufferRange(GL_UNIFORM_BUFFER, GLNVG_FRAG_BINDING, gl->fragBuf,
                     uniformOffset, sizeof(GLNVGfragUniforms));
 
   if (image != 0) {
-    tex = glnvg__findTexture(gl, image);
+    tex = gl->glnvg__findTexture(image);
   }
   // If no image is set, use empty texture
   if (tex == NULL) {
-    tex = glnvg__findTexture(gl, gl->dummyTex);
+    tex = gl->glnvg__findTexture(gl->dummyTex);
   }
   glnvg__bindTexture(gl, tex != NULL ? tex->tex : 0);
   glnvg__checkError(gl, "tex paint tex");
@@ -1102,13 +1043,6 @@ static void glnvg__renderDelete(void *uptr) {
   if (gl->vertBuf != 0)
     glDeleteBuffers(1, &gl->vertBuf);
 
-  for (i = 0; i < gl->ntextures; i++) {
-    if (gl->textures[i].tex != 0 &&
-        (gl->textures[i].flags & NVG_IMAGE_NODELETE) == 0)
-      glDeleteTextures(1, &gl->textures[i].tex);
-  }
-  free(gl->textures);
-
   free(gl->paths);
   free(gl->verts);
   free(gl->uniforms);
@@ -1118,13 +1052,11 @@ static void glnvg__renderDelete(void *uptr) {
 }
 
 NVGcontext *nvgCreateGL3(int flags) {
-  NVGparams params;
-  NVGcontext *ctx = NULL;
-  GLNVGcontext *gl = (GLNVGcontext *)malloc(sizeof(GLNVGcontext));
+  auto gl = new GLNVGcontext;
   if (gl == NULL)
     goto error;
-  memset(gl, 0, sizeof(GLNVGcontext));
 
+  NVGparams params;
   memset(&params, 0, sizeof(params));
   params.renderCreate = glnvg__renderCreate;
   params.renderCreateTexture = glnvg__renderCreateTexture;
@@ -1143,6 +1075,7 @@ NVGcontext *nvgCreateGL3(int flags) {
 
   gl->flags = flags;
 
+  NVGcontext *ctx = NULL;
   ctx = nvgCreateInternal(&params);
   if (ctx == NULL)
     goto error;
@@ -1161,8 +1094,7 @@ void nvgDeleteGL3(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
 int nvglCreateImageFromHandleGL3(NVGcontext *ctx, GLuint textureId, int w,
                                  int h, int imageFlags) {
   GLNVGcontext *gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
-  GLNVGtexture *tex = glnvg__allocTexture(gl);
-
+  auto tex = gl->glnvg__allocTexture();
   if (tex == NULL)
     return 0;
 
@@ -1177,6 +1109,6 @@ int nvglCreateImageFromHandleGL3(NVGcontext *ctx, GLuint textureId, int w,
 
 GLuint nvglImageHandleGL3(NVGcontext *ctx, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
-  GLNVGtexture *tex = glnvg__findTexture(gl, image);
+  auto tex = gl->glnvg__findTexture(image);
   return tex->tex;
 }
