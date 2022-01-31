@@ -10,7 +10,8 @@
             "request": "launch",
             "program": "${workspaceFolder}/macro_cutter.py",
             "args": [
-                "src/nanovg_gl.h"
+                "src/nanovg_gl.h",
+                "src/nanovg_gl.h",
             ],
             "console": "integratedTerminal"
         },
