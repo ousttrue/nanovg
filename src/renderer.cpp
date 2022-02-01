@@ -336,15 +336,15 @@ void Renderer::render(const float view[2], const GLNVGcall *pCall,
       glnvg__stroke(&call, pPath);
     else if (call.type == GLNVG_TRIANGLES)
       glnvg__triangles(&call);
-
-    glDisableVertexAttribArray(0);
-    glDisableVertexAttribArray(1);
-    glBindVertexArray(0);
-    glDisable(GL_CULL_FACE);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glUseProgram(0);
-    glnvg__bindTexture(0);
   }
+
+  glDisableVertexAttribArray(0);
+  glDisableVertexAttribArray(1);
+  glBindVertexArray(0);
+  glDisable(GL_CULL_FACE);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glUseProgram(0);
+  glnvg__bindTexture(0);
 }
 
 unsigned int glnvg_convertBlendFuncFactor(int factor) {

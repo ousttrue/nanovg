@@ -22,7 +22,7 @@
             "program": "${workspaceFolder}/build/Debug/bin/example_gl3.exe",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${fileDirname}",
+            "cwd": "${workspaceFolder}/src",
             "environment": [],
             "console": "externalTerminal"
         }
