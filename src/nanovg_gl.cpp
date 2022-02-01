@@ -75,9 +75,13 @@ struct GLNVGcontext {
   GLNVGcall *calls = {};
   int ccalls = {};
   int ncalls = {};
-  GLNVGpath *paths = {};
-  int cpaths = {};
-  int npaths = {};
+
+private:
+  GLNVGpath *_paths = {};
+  int _cpaths = {};
+  int _npaths = {};
+
+public:
   struct NVGvertex *verts = {};
   int cverts = {};
   int nverts = {};
@@ -104,10 +108,17 @@ public:
       glDeleteVertexArrays(1, &vertArr);
     if (vertBuf != 0)
       glDeleteBuffers(1, &vertBuf);
-    free(paths);
+    free(_paths);
     free(verts);
     free(uniforms);
     free(calls);
+  }
+
+  void clear() {
+    nverts = 0;
+    _npaths = 0;
+    ncalls = 0;
+    nuniforms = 0;
   }
 
   std::shared_ptr<GLNVGtexture> glnvg__findTexture(int id) {
@@ -117,6 +128,24 @@ public:
     }
     return {};
   }
+
+  int glnvg__allocPaths(int n) {
+    int ret = 0;
+    if (_npaths + n > _cpaths) {
+      int cpaths =
+          glnvg__maxi(_npaths + n, 128) + _cpaths / 2; // 1.5x Overallocate
+      auto paths = (GLNVGpath *)realloc(_paths, sizeof(GLNVGpath) * cpaths);
+      if (paths == NULL)
+        return -1;
+      _paths = paths;
+      _cpaths = cpaths;
+    }
+    ret = _npaths;
+    _npaths += n;
+    return ret;
+  }
+
+  GLNVGpath &get_path(size_t index) { return _paths[index]; }
 
   bool glnvg__deleteTexture(int id) {
     auto found = textures.find(id);
@@ -373,7 +402,7 @@ static void glnvg__renderViewport(void *uptr, float width, float height,
 }
 
 static void glnvg__fill(GLNVGcontext *gl, GLNVGcall *call) {
-  GLNVGpath *paths = &gl->paths[call->pathOffset];
+  auto paths = &gl->get_path(call->pathOffset);
   int i, npaths = call->pathCount;
 
   // Draw shapes
@@ -417,7 +446,7 @@ static void glnvg__fill(GLNVGcontext *gl, GLNVGcall *call) {
 }
 
 static void glnvg__convexFill(GLNVGcontext *gl, GLNVGcall *call) {
-  GLNVGpath *paths = &gl->paths[call->pathOffset];
+  auto paths = &gl->get_path(call->pathOffset);
   int i, npaths = call->pathCount;
 
   glnvg__setUniforms(gl, call->uniformOffset, call->image);
@@ -434,7 +463,7 @@ static void glnvg__convexFill(GLNVGcontext *gl, GLNVGcall *call) {
 }
 
 static void glnvg__stroke(GLNVGcontext *gl, GLNVGcall *call) {
-  GLNVGpath *paths = &gl->paths[call->pathOffset];
+  auto paths = &gl->get_path(call->pathOffset);
   int npaths = call->pathCount, i;
 
   if (gl->flags & NVG_STENCIL_STROKES) {
@@ -494,10 +523,7 @@ static void glnvg__triangles(GLNVGcontext *gl, GLNVGcall *call) {
 
 static void glnvg__renderCancel(void *uptr) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  gl->nverts = 0;
-  gl->npaths = 0;
-  gl->ncalls = 0;
-  gl->nuniforms = 0;
+  gl->clear();
 }
 
 static GLenum glnvg_convertBlendFuncFactor(int factor) {
@@ -619,10 +645,7 @@ static void glnvg__renderFlush(void *uptr) {
   }
 
   // Reset calls
-  gl->nverts = 0;
-  gl->npaths = 0;
-  gl->ncalls = 0;
-  gl->nuniforms = 0;
+  gl->clear();
 }
 
 static int glnvg__maxVertCount(const NVGpath *paths, int npaths) {
@@ -648,23 +671,6 @@ static GLNVGcall *glnvg__allocCall(GLNVGcontext *gl) {
   }
   ret = &gl->calls[gl->ncalls++];
   memset(ret, 0, sizeof(GLNVGcall));
-  return ret;
-}
-
-static int glnvg__allocPaths(GLNVGcontext *gl, int n) {
-  int ret = 0;
-  if (gl->npaths + n > gl->cpaths) {
-    GLNVGpath *paths;
-    int cpaths =
-        glnvg__maxi(gl->npaths + n, 128) + gl->cpaths / 2; // 1.5x Overallocate
-    paths = (GLNVGpath *)realloc(gl->paths, sizeof(GLNVGpath) * cpaths);
-    if (paths == NULL)
-      return -1;
-    gl->paths = paths;
-    gl->cpaths = cpaths;
-  }
-  ret = gl->npaths;
-  gl->npaths += n;
   return ret;
 }
 
@@ -720,16 +726,12 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
                               int npaths) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
   GLNVGcall *call = glnvg__allocCall(gl);
-  NVGvertex *quad;
-  GLNVGfragUniforms *frag;
-  int i, maxverts, offset;
-
   if (call == NULL)
     return;
 
   call->type = GLNVG_FILL;
   call->triangleCount = 4;
-  call->pathOffset = glnvg__allocPaths(gl, npaths);
+  call->pathOffset = gl->glnvg__allocPaths(npaths);
   if (call->pathOffset == -1)
     goto error;
   call->pathCount = npaths;
@@ -743,13 +745,13 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
   }
 
   // Allocate vertices for all the paths.
-  maxverts = glnvg__maxVertCount(paths, npaths) + call->triangleCount;
-  offset = glnvg__allocVerts(gl, maxverts);
+  int maxverts = glnvg__maxVertCount(paths, npaths) + call->triangleCount;
+  int offset = glnvg__allocVerts(gl, maxverts);
   if (offset == -1)
     goto error;
 
-  for (i = 0; i < npaths; i++) {
-    GLNVGpath *copy = &gl->paths[call->pathOffset + i];
+  for (int i = 0; i < npaths; i++) {
+    auto copy = &gl->get_path(call->pathOffset + i);
     const NVGpath *path = &paths[i];
     memset(copy, 0, sizeof(GLNVGpath));
     if (path->nfill > 0) {
@@ -771,7 +773,7 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
   if (call->type == GLNVG_FILL) {
     // Quad
     call->triangleOffset = offset;
-    quad = &gl->verts[call->triangleOffset];
+    auto quad = &gl->verts[call->triangleOffset];
     glnvg__vset(&quad[0], bounds[2], bounds[3], 0.5f, 1.0f);
     glnvg__vset(&quad[1], bounds[2], bounds[1], 0.5f, 1.0f);
     glnvg__vset(&quad[2], bounds[0], bounds[3], 0.5f, 1.0f);
@@ -781,7 +783,7 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
     if (call->uniformOffset == -1)
       goto error;
     // Simple shader for stencil
-    frag = nvg__fragUniformPtr(gl, call->uniformOffset);
+    auto frag = nvg__fragUniformPtr(gl, call->uniformOffset);
     memset(frag, 0, sizeof(*frag));
     frag->strokeThr = -1.0f;
     frag->type = NSVG_SHADER_SIMPLE;
@@ -820,7 +822,7 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
     return;
 
   call->type = GLNVG_STROKE;
-  call->pathOffset = glnvg__allocPaths(gl, npaths);
+  call->pathOffset = gl->glnvg__allocPaths(npaths);
   if (call->pathOffset == -1)
     goto error;
   call->pathCount = npaths;
@@ -834,7 +836,7 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
     goto error;
 
   for (i = 0; i < npaths; i++) {
-    GLNVGpath *copy = &gl->paths[call->pathOffset + i];
+    auto copy = &gl->get_path(call->pathOffset + i);
     const NVGpath *path = &paths[i];
     memset(copy, 0, sizeof(GLNVGpath));
     if (path->nstroke) {
