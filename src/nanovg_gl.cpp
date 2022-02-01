@@ -2,6 +2,7 @@
 #include "nanovg.h"
 #include "nanovg_gl_shader.h"
 #include "nanovg_gl_texture.h"
+#include <assert.h>
 #include <glad/glad.h>
 #include <math.h>
 #include <memory>
@@ -71,20 +72,17 @@ struct GLNVGcontext {
   int _fragSize = {};
   int _flags = {};
 
-  // Per frame buffers
 private:
+  // Per frame buffers
   std::list<GLNVGcall> _calls;
   std::vector<GLNVGpath> _paths;
   NVGvertex *_verts = {};
   int _nverts = {};
   int _cverts = {};
-
-public:
   unsigned char *_uniforms = {};
   int _cuniforms = {};
   int _nuniforms = {};
 
-public:
   // cached state
   GLuint _boundTexture = {};
   GLuint _stencilMask = {};
@@ -93,6 +91,7 @@ public:
   GLuint _stencilFuncMask = {};
   GLNVGblend _blendFunc = {};
 
+public:
   int _dummyTex = {};
 
 public:
@@ -164,8 +163,28 @@ public:
     return ret;
   }
 
+  int glnvg__allocFragUniforms(int n) {
+    int ret = 0, structSize = _fragSize;
+    if (_nuniforms + n > _cuniforms) {
+      unsigned char *uniforms;
+      int cuniforms = glnvg__maxi(_nuniforms + n, 128) +
+                      _cuniforms / 2; // 1.5x Overallocate
+      uniforms = (unsigned char *)realloc(_uniforms, structSize * cuniforms);
+      if (uniforms == NULL)
+        return -1;
+      _uniforms = uniforms;
+      _cuniforms = cuniforms;
+    }
+    ret = _nuniforms * structSize;
+    _nuniforms += n;
+    return ret;
+  }
+
   GLNVGpath &get_path(size_t index) { return _paths[index]; }
   NVGvertex &get_vertex(size_t index) { return _verts[index]; }
+  GLNVGfragUniforms *nvg__fragUniformPtr(int i) {
+    return (GLNVGfragUniforms *)&_uniforms[i];
+  }
 
   bool glnvg__deleteTexture(int id) {
     auto found = _textures.find(id);
@@ -212,8 +231,8 @@ public:
       // Upload vertex data
       glBindVertexArray(_vertArr);
       glBindBuffer(GL_ARRAY_BUFFER, _vertBuf);
-      glBufferData(GL_ARRAY_BUFFER, _nverts * sizeof(NVGvertex),
-                   _verts, GL_STREAM_DRAW);
+      glBufferData(GL_ARRAY_BUFFER, _nverts * sizeof(NVGvertex), _verts,
+                   GL_STREAM_DRAW);
       glEnableVertexAttribArray(0);
       glEnableVertexAttribArray(1);
       glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(NVGvertex),
@@ -454,6 +473,9 @@ static int glnvg__renderCreate(void *uptr) {
   gl->_fragSize =
       sizeof(GLNVGfragUniforms) + align - sizeof(GLNVGfragUniforms) % align;
 
+  auto s = sizeof(GLNVGfragUniforms);
+  assert(s == gl->_fragSize);
+
   // Some platforms does not allow to have samples to unset textures.
   // Create empty one which is bound when there's no texture specified.
   gl->_dummyTex =
@@ -595,8 +617,6 @@ static int glnvg__convertPaint(GLNVGcontext *gl, GLNVGfragUniforms *frag,
   return 1;
 }
 
-static GLNVGfragUniforms *nvg__fragUniformPtr(GLNVGcontext *gl, int i);
-
 static void glnvg__renderViewport(void *uptr, float width, float height,
                                   float devicePixelRatio) {
   NVG_NOTUSED(devicePixelRatio);
@@ -667,27 +687,6 @@ static int glnvg__maxVertCount(const NVGpath *paths, int npaths) {
   return count;
 }
 
-static int glnvg__allocFragUniforms(GLNVGcontext *gl, int n) {
-  int ret = 0, structSize = gl->_fragSize;
-  if (gl->_nuniforms + n > gl->_cuniforms) {
-    unsigned char *uniforms;
-    int cuniforms = glnvg__maxi(gl->_nuniforms + n, 128) +
-                    gl->_cuniforms / 2; // 1.5x Overallocate
-    uniforms = (unsigned char *)realloc(gl->_uniforms, structSize * cuniforms);
-    if (uniforms == NULL)
-      return -1;
-    gl->_uniforms = uniforms;
-    gl->_cuniforms = cuniforms;
-  }
-  ret = gl->_nuniforms * structSize;
-  gl->_nuniforms += n;
-  return ret;
-}
-
-static GLNVGfragUniforms *nvg__fragUniformPtr(GLNVGcontext *gl, int i) {
-  return (GLNVGfragUniforms *)&gl->_uniforms[i];
-}
-
 static void glnvg__vset(NVGvertex *vtx, float x, float y, float u, float v) {
   vtx->x = x;
   vtx->y = y;
@@ -756,24 +755,24 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
     glnvg__vset(&quad[2], bounds[0], bounds[3], 0.5f, 1.0f);
     glnvg__vset(&quad[3], bounds[0], bounds[1], 0.5f, 1.0f);
 
-    call->uniformOffset = glnvg__allocFragUniforms(gl, 2);
+    call->uniformOffset = gl->glnvg__allocFragUniforms(2);
     if (call->uniformOffset == -1)
       return;
     // Simple shader for stencil
-    auto frag = nvg__fragUniformPtr(gl, call->uniformOffset);
+    auto frag = gl->nvg__fragUniformPtr(call->uniformOffset);
     memset(frag, 0, sizeof(*frag));
     frag->strokeThr = -1.0f;
     frag->type = NSVG_SHADER_SIMPLE;
     // Fill shader
     glnvg__convertPaint(
-        gl, nvg__fragUniformPtr(gl, call->uniformOffset + gl->_fragSize), paint,
+        gl, gl->nvg__fragUniformPtr(call->uniformOffset + gl->_fragSize), paint,
         scissor, fringe, fringe, -1.0f);
   } else {
-    call->uniformOffset = glnvg__allocFragUniforms(gl, 1);
+    call->uniformOffset = gl->glnvg__allocFragUniforms(1);
     if (call->uniformOffset == -1)
       return;
     // Fill shader
-    glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call->uniformOffset), paint,
+    glnvg__convertPaint(gl, gl->nvg__fragUniformPtr(call->uniformOffset), paint,
                         scissor, fringe, fringe, -1.0f);
   }
 }
@@ -819,22 +818,22 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
 
   if (gl->_flags & NVG_STENCIL_STROKES) {
     // Fill shader
-    call->uniformOffset = glnvg__allocFragUniforms(gl, 2);
+    call->uniformOffset = gl->glnvg__allocFragUniforms(2);
     if (call->uniformOffset == -1)
       return;
 
-    glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call->uniformOffset), paint,
+    glnvg__convertPaint(gl, gl->nvg__fragUniformPtr(call->uniformOffset), paint,
                         scissor, strokeWidth, fringe, -1.0f);
     glnvg__convertPaint(
-        gl, nvg__fragUniformPtr(gl, call->uniformOffset + gl->_fragSize), paint,
+        gl, gl->nvg__fragUniformPtr(call->uniformOffset + gl->_fragSize), paint,
         scissor, strokeWidth, fringe, 1.0f - 0.5f / 255.0f);
 
   } else {
     // Fill shader
-    call->uniformOffset = glnvg__allocFragUniforms(gl, 1);
+    call->uniformOffset = gl->glnvg__allocFragUniforms(1);
     if (call->uniformOffset == -1)
       return;
-    glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call->uniformOffset), paint,
+    glnvg__convertPaint(gl, gl->nvg__fragUniformPtr(call->uniformOffset), paint,
                         scissor, strokeWidth, fringe, -1.0f);
   }
 }
@@ -863,10 +862,10 @@ static void glnvg__renderTriangles(
          sizeof(NVGvertex) * nverts);
 
   // Fill shader
-  call->uniformOffset = glnvg__allocFragUniforms(gl, 1);
+  call->uniformOffset = gl->glnvg__allocFragUniforms(1);
   if (call->uniformOffset == -1)
     return;
-  frag = nvg__fragUniformPtr(gl, call->uniformOffset);
+  frag = gl->nvg__fragUniformPtr(call->uniformOffset);
   glnvg__convertPaint(gl, frag, paint, scissor, 1.0f, fringe, -1.0f);
   frag->type = NSVG_SHADER_IMG;
 }
