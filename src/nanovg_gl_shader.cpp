@@ -1,4 +1,6 @@
 #include "nanovg_gl_shader.h"
+#include <assert.h>
+#include <memory>
 #include <stdio.h>
 
 // TODO: mediump float may not be enough for GLES2 in iOS.
@@ -178,6 +180,15 @@ static void glnvg__dumpProgramError(GLuint prog, const char *name) {
   printf("Program %s error:\n%s\n", name, str);
 }
 
+GLNVGshader::GLNVGshader() {
+  prog = glCreateProgram();
+  assert(prog);
+  vert = glCreateShader(GL_VERTEX_SHADER);
+  assert(vert);
+  frag = glCreateShader(GL_FRAGMENT_SHADER);
+  assert(frag);
+}
+
 GLNVGshader::~GLNVGshader() {
   if (prog != 0)
     glDeleteProgram(prog);
@@ -189,7 +200,7 @@ GLNVGshader::~GLNVGshader() {
 
 void GLNVGshader::use() { glUseProgram(prog); }
 
-bool GLNVGshader::createShader(bool useAntiAlias) {
+std::shared_ptr<GLNVGshader> GLNVGshader::create(bool useAntiAlias) {
   auto name = "shader";
   auto header = shaderHeader;
   auto vshader = fillVertShader;
@@ -199,47 +210,46 @@ bool GLNVGshader::createShader(bool useAntiAlias) {
     opts = "#define EDGE_AA 1\n";
   }
 
-  GLint status;
   const char *str[3];
   str[0] = header;
   str[1] = opts != NULL ? opts : "";
 
-  prog = glCreateProgram();
-  vert = glCreateShader(GL_VERTEX_SHADER);
-  frag = glCreateShader(GL_FRAGMENT_SHADER);
+  auto shader = std::shared_ptr<GLNVGshader>(new GLNVGshader);
+
   str[2] = vshader;
-  glShaderSource(vert, 3, str, 0);
+  glShaderSource(shader->vert, 3, str, 0);
   str[2] = fshader;
-  glShaderSource(frag, 3, str, 0);
+  glShaderSource(shader->frag, 3, str, 0);
 
-  glCompileShader(vert);
-  glGetShaderiv(vert, GL_COMPILE_STATUS, &status);
+  glCompileShader(shader->vert);
+  GLint status;
+  glGetShaderiv(shader->vert, GL_COMPILE_STATUS, &status);
   if (status != GL_TRUE) {
-    glnvg__dumpShaderError(vert, name, "vert");
-    return false;
+    glnvg__dumpShaderError(shader->vert, name, "vert");
+    return {};
   }
 
-  glCompileShader(frag);
-  glGetShaderiv(frag, GL_COMPILE_STATUS, &status);
+  glCompileShader(shader->frag);
+  glGetShaderiv(shader->frag, GL_COMPILE_STATUS, &status);
   if (status != GL_TRUE) {
-    glnvg__dumpShaderError(frag, name, "frag");
-    return false;
+    glnvg__dumpShaderError(shader->frag, name, "frag");
+    return {};
   }
 
-  glAttachShader(prog, vert);
-  glAttachShader(prog, frag);
+  glAttachShader(shader->prog, shader->vert);
+  glAttachShader(shader->prog, shader->frag);
 
-  glBindAttribLocation(prog, 0, "vertex");
-  glBindAttribLocation(prog, 1, "tcoord");
+  glBindAttribLocation(shader->prog, 0, "vertex");
+  glBindAttribLocation(shader->prog, 1, "tcoord");
 
-  glLinkProgram(prog);
-  glGetProgramiv(prog, GL_LINK_STATUS, &status);
+  glLinkProgram(shader->prog);
+  glGetProgramiv(shader->prog, GL_LINK_STATUS, &status);
   if (status != GL_TRUE) {
-    glnvg__dumpProgramError(prog, name);
-    return false;
+    glnvg__dumpProgramError(shader->prog, name);
+    return {};
   }
 
-  return true;
+  return shader;
 }
 
 void GLNVGshader::getUniforms() {

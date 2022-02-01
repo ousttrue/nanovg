@@ -1,5 +1,6 @@
 #pragma once
 #include <glad/glad.h>
+#include <memory>
 
 enum GLNVGuniformLoc {
   GLNVG_LOC_VIEWSIZE,
@@ -25,10 +26,11 @@ class GLNVGshader {
   GLuint vert = 0;
   GLint loc[GLNVG_MAX_LOCS];
 
+  GLNVGshader();
 public:
   ~GLNVGshader();
+  static std::shared_ptr<GLNVGshader> create(bool useAntiAlias);
   void use();
-  bool createShader(bool useAntiAlias);
   void getUniforms();
   void blockBind();
   void set_texture_and_view(int texture, const float view[2]);
