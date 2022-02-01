@@ -12,7 +12,6 @@
 
 static int glnvg__maxi(int a, int b) { return a > b ? a : b; }
 
-
 struct GLNVGblend {
   GLenum srcRGB;
   GLenum dstRGB;
@@ -98,6 +97,19 @@ public:
   int dummyTex;
 
 public:
+  ~GLNVGcontext() {
+    if (fragBuf != 0)
+      glDeleteBuffers(1, &fragBuf);
+    if (vertArr != 0)
+      glDeleteVertexArrays(1, &vertArr);
+    if (vertBuf != 0)
+      glDeleteBuffers(1, &vertBuf);
+    free(paths);
+    free(verts);
+    free(uniforms);
+    free(calls);
+  }
+
   std::shared_ptr<GLNVGtexture> glnvg__findTexture(int id) {
     auto found = textures.find(id);
     if (found != textures.end()) {
@@ -904,29 +916,16 @@ error:
 }
 
 static void glnvg__renderDelete(void *uptr) {
-  GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  int i;
-  if (gl == NULL)
+  auto gl = (GLNVGcontext *)uptr;
+  if (!gl)
     return;
 
-  if (gl->fragBuf != 0)
-    glDeleteBuffers(1, &gl->fragBuf);
-  if (gl->vertArr != 0)
-    glDeleteVertexArrays(1, &gl->vertArr);
-  if (gl->vertBuf != 0)
-    glDeleteBuffers(1, &gl->vertBuf);
-
-  free(gl->paths);
-  free(gl->verts);
-  free(gl->uniforms);
-  free(gl->calls);
-
-  free(gl);
+  delete gl;
 }
 
 NVGcontext *nvgCreateGL3(int flags) {
   auto gl = new GLNVGcontext;
-  if (gl == NULL)
+  if (!gl)
     goto error;
 
   NVGparams params;
