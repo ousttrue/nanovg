@@ -75,11 +75,11 @@ struct GLNVGcontext {
 private:
   std::list<GLNVGcall> _calls;
   std::vector<GLNVGpath> _paths;
+  NVGvertex *_verts = {};
+  int _nverts = {};
+  int _cverts = {};
 
 public:
-  struct NVGvertex *_verts = {};
-  int _cverts = {};
-  int _nverts = {};
   unsigned char *_uniforms = {};
   int _cuniforms = {};
   int _nuniforms = {};
@@ -104,7 +104,6 @@ public:
     if (_vertBuf != 0)
       glDeleteBuffers(1, &_vertBuf);
 
-    free(_verts);
     free(_uniforms);
   }
 
@@ -148,7 +147,25 @@ public:
     return ret;
   }
 
+  int glnvg__allocVerts(int n) {
+    int ret = 0;
+    if (_nverts + n > _cverts) {
+      NVGvertex *verts;
+      int cverts =
+          glnvg__maxi(_nverts + n, 4096) + _cverts / 2; // 1.5x Overallocate
+      verts = (NVGvertex *)realloc(_verts, sizeof(NVGvertex) * cverts);
+      if (verts == NULL)
+        return -1;
+      _verts = verts;
+      _cverts = cverts;
+    }
+    ret = _nverts;
+    _nverts += n;
+    return ret;
+  }
+
   GLNVGpath &get_path(size_t index) { return _paths[index]; }
+  NVGvertex &get_vertex(size_t index) { return _verts[index]; }
 
   bool glnvg__deleteTexture(int id) {
     auto found = _textures.find(id);
@@ -195,8 +212,8 @@ public:
       // Upload vertex data
       glBindVertexArray(_vertArr);
       glBindBuffer(GL_ARRAY_BUFFER, _vertBuf);
-      glBufferData(GL_ARRAY_BUFFER, _nverts * sizeof(NVGvertex), _verts,
-                   GL_STREAM_DRAW);
+      glBufferData(GL_ARRAY_BUFFER, _nverts * sizeof(NVGvertex),
+                   _verts, GL_STREAM_DRAW);
       glEnableVertexAttribArray(0);
       glEnableVertexAttribArray(1);
       glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(NVGvertex),
@@ -650,23 +667,6 @@ static int glnvg__maxVertCount(const NVGpath *paths, int npaths) {
   return count;
 }
 
-static int glnvg__allocVerts(GLNVGcontext *gl, int n) {
-  int ret = 0;
-  if (gl->_nverts + n > gl->_cverts) {
-    NVGvertex *verts;
-    int cverts = glnvg__maxi(gl->_nverts + n, 4096) +
-                 gl->_cverts / 2; // 1.5x Overallocate
-    verts = (NVGvertex *)realloc(gl->_verts, sizeof(NVGvertex) * cverts);
-    if (verts == NULL)
-      return -1;
-    gl->_verts = verts;
-    gl->_cverts = cverts;
-  }
-  ret = gl->_nverts;
-  gl->_nverts += n;
-  return ret;
-}
-
 static int glnvg__allocFragUniforms(GLNVGcontext *gl, int n) {
   int ret = 0, structSize = gl->_fragSize;
   if (gl->_nuniforms + n > gl->_cuniforms) {
@@ -722,7 +722,7 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
 
   // Allocate vertices for all the paths.
   int maxverts = glnvg__maxVertCount(paths, npaths) + call->triangleCount;
-  int offset = glnvg__allocVerts(gl, maxverts);
+  int offset = gl->glnvg__allocVerts(maxverts);
   if (offset == -1)
     return;
 
@@ -733,13 +733,14 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
     if (path->nfill > 0) {
       copy->fillOffset = offset;
       copy->fillCount = path->nfill;
-      memcpy(&gl->_verts[offset], path->fill, sizeof(NVGvertex) * path->nfill);
+      memcpy(&gl->get_vertex(offset), path->fill,
+             sizeof(NVGvertex) * path->nfill);
       offset += path->nfill;
     }
     if (path->nstroke > 0) {
       copy->strokeOffset = offset;
       copy->strokeCount = path->nstroke;
-      memcpy(&gl->_verts[offset], path->stroke,
+      memcpy(&gl->get_vertex(offset), path->stroke,
              sizeof(NVGvertex) * path->nstroke);
       offset += path->nstroke;
     }
@@ -749,7 +750,7 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
   if (call->type == GLNVG_FILL) {
     // Quad
     call->triangleOffset = offset;
-    auto quad = &gl->_verts[call->triangleOffset];
+    auto quad = &gl->get_vertex(call->triangleOffset);
     glnvg__vset(&quad[0], bounds[2], bounds[3], 0.5f, 1.0f);
     glnvg__vset(&quad[1], bounds[2], bounds[1], 0.5f, 1.0f);
     glnvg__vset(&quad[2], bounds[0], bounds[3], 0.5f, 1.0f);
@@ -799,7 +800,7 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
 
   // Allocate vertices for all the paths.
   maxverts = glnvg__maxVertCount(paths, npaths);
-  offset = glnvg__allocVerts(gl, maxverts);
+  offset = gl->glnvg__allocVerts(maxverts);
   if (offset == -1)
     return;
 
@@ -810,7 +811,7 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
     if (path->nstroke) {
       copy->strokeOffset = offset;
       copy->strokeCount = path->nstroke;
-      memcpy(&gl->_verts[offset], path->stroke,
+      memcpy(&gl->get_vertex(offset), path->stroke,
              sizeof(NVGvertex) * path->nstroke);
       offset += path->nstroke;
     }
@@ -853,12 +854,13 @@ static void glnvg__renderTriangles(
   call->blendFunc = glnvg__blendCompositeOperation(compositeOperation);
 
   // Allocate vertices for all the paths.
-  call->triangleOffset = glnvg__allocVerts(gl, nverts);
+  call->triangleOffset = gl->glnvg__allocVerts(nverts);
   if (call->triangleOffset == -1)
     return;
   call->triangleCount = nverts;
 
-  memcpy(&gl->_verts[call->triangleOffset], verts, sizeof(NVGvertex) * nverts);
+  memcpy(&gl->get_vertex(call->triangleOffset), verts,
+         sizeof(NVGvertex) * nverts);
 
   // Fill shader
   call->uniformOffset = glnvg__allocFragUniforms(gl, 1);
