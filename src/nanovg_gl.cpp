@@ -72,14 +72,9 @@ struct GLNVGcontext {
   int _flags = {};
 
   // Per frame buffers
-  GLNVGcall *_calls = {};
-  int _ccalls = {};
-  int _ncalls = {};
-
 private:
-  GLNVGpath *_paths = {};
-  int _cpaths = {};
-  int _npaths = {};
+  std::list<GLNVGcall> _calls;
+  std::vector<GLNVGpath> _paths;
 
 public:
   struct NVGvertex *_verts = {};
@@ -108,16 +103,15 @@ public:
       glDeleteVertexArrays(1, &_vertArr);
     if (_vertBuf != 0)
       glDeleteBuffers(1, &_vertBuf);
-    free(_paths);
+
     free(_verts);
     free(_uniforms);
-    free(_calls);
   }
 
   void clear() {
     _nverts = 0;
-    _npaths = 0;
-    _ncalls = 0;
+    _paths.clear();
+    _calls.clear();
     _nuniforms = 0;
   }
 
@@ -140,19 +134,17 @@ public:
     return {};
   }
 
+  GLNVGcall *glnvg__allocCall() {
+    _calls.push_back({});
+    return &_calls.back();
+    // ret = &gl->_calls[gl->_ncalls++];
+    // memset(ret, 0, sizeof(GLNVGcall));
+    // return ret;
+  }
+
   int glnvg__allocPaths(int n) {
-    int ret = 0;
-    if (_npaths + n > _cpaths) {
-      int cpaths =
-          glnvg__maxi(_npaths + n, 128) + _cpaths / 2; // 1.5x Overallocate
-      auto paths = (GLNVGpath *)realloc(_paths, sizeof(GLNVGpath) * cpaths);
-      if (paths == NULL)
-        return -1;
-      _paths = paths;
-      _cpaths = cpaths;
-    }
-    ret = _npaths;
-    _npaths += n;
+    auto ret = _paths.size();
+    _paths.resize(ret + n);
     return ret;
   }
 
@@ -168,7 +160,7 @@ public:
   }
 
   void render() {
-    if (_ncalls > 0) {
+    if (!_calls.empty()) {
 
       // Setup require GL state.
       _shader.use();
@@ -217,17 +209,16 @@ public:
 
       glBindBuffer(GL_UNIFORM_BUFFER, _fragBuf);
 
-      for (int i = 0; i < _ncalls; i++) {
-        GLNVGcall *call = &_calls[i];
-        glnvg__blendFuncSeparate(&call->blendFunc);
-        if (call->type == GLNVG_FILL)
-          glnvg__fill(call);
-        else if (call->type == GLNVG_CONVEXFILL)
-          glnvg__convexFill(call);
-        else if (call->type == GLNVG_STROKE)
-          glnvg__stroke(call);
-        else if (call->type == GLNVG_TRIANGLES)
-          glnvg__triangles(call);
+      for (auto &call : _calls) {
+        glnvg__blendFuncSeparate(&call.blendFunc);
+        if (call.type == GLNVG_FILL)
+          glnvg__fill(&call);
+        else if (call.type == GLNVG_CONVEXFILL)
+          glnvg__convexFill(&call);
+        else if (call.type == GLNVG_STROKE)
+          glnvg__stroke(&call);
+        else if (call.type == GLNVG_TRIANGLES)
+          glnvg__triangles(&call);
       }
 
       glDisableVertexAttribArray(0);
@@ -659,23 +650,6 @@ static int glnvg__maxVertCount(const NVGpath *paths, int npaths) {
   return count;
 }
 
-static GLNVGcall *glnvg__allocCall(GLNVGcontext *gl) {
-  GLNVGcall *ret = NULL;
-  if (gl->_ncalls + 1 > gl->_ccalls) {
-    GLNVGcall *calls;
-    int ccalls = glnvg__maxi(gl->_ncalls + 1, 128) +
-                 gl->_ccalls / 2; // 1.5x Overallocate
-    calls = (GLNVGcall *)realloc(gl->_calls, sizeof(GLNVGcall) * ccalls);
-    if (calls == NULL)
-      return NULL;
-    gl->_calls = calls;
-    gl->_ccalls = ccalls;
-  }
-  ret = &gl->_calls[gl->_ncalls++];
-  memset(ret, 0, sizeof(GLNVGcall));
-  return ret;
-}
-
 static int glnvg__allocVerts(GLNVGcontext *gl, int n) {
   int ret = 0;
   if (gl->_nverts + n > gl->_cverts) {
@@ -727,7 +701,7 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
                               const float *bounds, const NVGpath *paths,
                               int npaths) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  GLNVGcall *call = glnvg__allocCall(gl);
+  GLNVGcall *call = gl->glnvg__allocCall();
   if (call == NULL)
     return;
 
@@ -735,7 +709,7 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
   call->triangleCount = 4;
   call->pathOffset = gl->glnvg__allocPaths(npaths);
   if (call->pathOffset == -1)
-    goto error;
+    return;
   call->pathCount = npaths;
   call->image = paint->image;
   call->blendFunc = glnvg__blendCompositeOperation(compositeOperation);
@@ -750,7 +724,7 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
   int maxverts = glnvg__maxVertCount(paths, npaths) + call->triangleCount;
   int offset = glnvg__allocVerts(gl, maxverts);
   if (offset == -1)
-    goto error;
+    return;
 
   for (int i = 0; i < npaths; i++) {
     auto copy = &gl->get_path(call->pathOffset + i);
@@ -783,7 +757,7 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
 
     call->uniformOffset = glnvg__allocFragUniforms(gl, 2);
     if (call->uniformOffset == -1)
-      goto error;
+      return;
     // Simple shader for stencil
     auto frag = nvg__fragUniformPtr(gl, call->uniformOffset);
     memset(frag, 0, sizeof(*frag));
@@ -796,19 +770,11 @@ static void glnvg__renderFill(void *uptr, NVGpaint *paint,
   } else {
     call->uniformOffset = glnvg__allocFragUniforms(gl, 1);
     if (call->uniformOffset == -1)
-      goto error;
+      return;
     // Fill shader
     glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call->uniformOffset), paint,
                         scissor, fringe, fringe, -1.0f);
   }
-
-  return;
-
-error:
-  // We get here if call alloc was ok, but something else is not.
-  // Roll back the last call to prevent drawing it.
-  if (gl->_ncalls > 0)
-    gl->_ncalls--;
 }
 
 static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
@@ -817,7 +783,7 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
                                 float strokeWidth, const NVGpath *paths,
                                 int npaths) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  GLNVGcall *call = glnvg__allocCall(gl);
+  GLNVGcall *call = gl->glnvg__allocCall();
   int i, maxverts, offset;
 
   if (call == NULL)
@@ -826,7 +792,7 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
   call->type = GLNVG_STROKE;
   call->pathOffset = gl->glnvg__allocPaths(npaths);
   if (call->pathOffset == -1)
-    goto error;
+    return;
   call->pathCount = npaths;
   call->image = paint->image;
   call->blendFunc = glnvg__blendCompositeOperation(compositeOperation);
@@ -835,7 +801,7 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
   maxverts = glnvg__maxVertCount(paths, npaths);
   offset = glnvg__allocVerts(gl, maxverts);
   if (offset == -1)
-    goto error;
+    return;
 
   for (i = 0; i < npaths; i++) {
     auto copy = &gl->get_path(call->pathOffset + i);
@@ -854,7 +820,7 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
     // Fill shader
     call->uniformOffset = glnvg__allocFragUniforms(gl, 2);
     if (call->uniformOffset == -1)
-      goto error;
+      return;
 
     glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call->uniformOffset), paint,
                         scissor, strokeWidth, fringe, -1.0f);
@@ -866,25 +832,17 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
     // Fill shader
     call->uniformOffset = glnvg__allocFragUniforms(gl, 1);
     if (call->uniformOffset == -1)
-      goto error;
+      return;
     glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call->uniformOffset), paint,
                         scissor, strokeWidth, fringe, -1.0f);
   }
-
-  return;
-
-error:
-  // We get here if call alloc was ok, but something else is not.
-  // Roll back the last call to prevent drawing it.
-  if (gl->_ncalls > 0)
-    gl->_ncalls--;
 }
 
 static void glnvg__renderTriangles(
     void *uptr, NVGpaint *paint, NVGcompositeOperationState compositeOperation,
     NVGscissor *scissor, const NVGvertex *verts, int nverts, float fringe) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  GLNVGcall *call = glnvg__allocCall(gl);
+  GLNVGcall *call = gl->glnvg__allocCall();
   GLNVGfragUniforms *frag;
 
   if (call == NULL)
@@ -897,7 +855,7 @@ static void glnvg__renderTriangles(
   // Allocate vertices for all the paths.
   call->triangleOffset = glnvg__allocVerts(gl, nverts);
   if (call->triangleOffset == -1)
-    goto error;
+    return;
   call->triangleCount = nverts;
 
   memcpy(&gl->_verts[call->triangleOffset], verts, sizeof(NVGvertex) * nverts);
@@ -905,18 +863,10 @@ static void glnvg__renderTriangles(
   // Fill shader
   call->uniformOffset = glnvg__allocFragUniforms(gl, 1);
   if (call->uniformOffset == -1)
-    goto error;
+    return;
   frag = nvg__fragUniformPtr(gl, call->uniformOffset);
   glnvg__convertPaint(gl, frag, paint, scissor, 1.0f, fringe, -1.0f);
   frag->type = NSVG_SHADER_IMG;
-
-  return;
-
-error:
-  // We get here if call alloc was ok, but something else is not.
-  // Roll back the last call to prevent drawing it.
-  if (gl->_ncalls > 0)
-    gl->_ncalls--;
 }
 
 static void glnvg__renderDelete(void *uptr) {
