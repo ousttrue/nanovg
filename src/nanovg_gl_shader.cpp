@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <memory>
 #include <stdio.h>
+#include <glad/glad.h>
 
 // TODO: mediump float may not be enough for GLES2 in iOS.
 // see the following discussion: https://github.com/memononen/nanovg/issues/46

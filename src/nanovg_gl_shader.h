@@ -1,5 +1,4 @@
 #pragma once
-#include <glad/glad.h>
 #include <memory>
 
 enum GLNVGuniformLoc {
@@ -21,10 +20,10 @@ enum GLNVGuniformBindings {
 };
 
 class GLNVGshader {
-  GLuint prog = 0;
-  GLuint frag = 0;
-  GLuint vert = 0;
-  GLint loc[GLNVG_MAX_LOCS];
+  unsigned int prog = 0;
+  unsigned int frag = 0;
+  unsigned int vert = 0;
+  int loc[GLNVG_MAX_LOCS];
 
   GLNVGshader();
 public:

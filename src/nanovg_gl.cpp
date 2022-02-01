@@ -1,6 +1,7 @@
 #include "nanovg_gl.h"
 #include "nanovg_gl_context.h"
 #include "nanovg_gl_texture.h"
+#include "renderer.h"
 #include <assert.h>
 
 ///
@@ -19,19 +20,19 @@ static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
   if (!tex) {
     return 0;
   }
-  gl->registerTexture(tex);
+  gl->getRenderer()->registerTexture(tex);
   return tex->id();
 }
 
 static int glnvg__renderDeleteTexture(void *uptr, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  return gl->deleteTexture(image);
+  return gl->getRenderer()->deleteTexture(image);
 }
 
 static int glnvg__renderUpdateTexture(void *uptr, int image, int x, int y,
                                       int w, int h, const unsigned char *data) {
   auto gl = (GLNVGcontext *)uptr;
-  auto tex = gl->findTexture(image);
+  auto tex = gl->getRenderer()->findTexture(image);
   if (!tex)
     return 0;
   tex->update(x, y, w, h, data);
@@ -40,7 +41,7 @@ static int glnvg__renderUpdateTexture(void *uptr, int image, int x, int y,
 
 static int glnvg__renderGetTextureSize(void *uptr, int image, int *w, int *h) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  auto tex = gl->findTexture(image);
+  auto tex = gl->getRenderer()->findTexture(image);
   if (!tex)
     return 0;
   *w = tex->width();
@@ -134,12 +135,12 @@ int nvglCreateImageFromHandleGL3(NVGcontext *ctx, unsigned int textureId, int w,
   auto tex = GLNVGtexture::fromHandle(textureId, w, h, imageFlags);
   if (!tex)
     return 0;
-  gl->registerTexture(tex);
+  gl->getRenderer()->registerTexture(tex);
   return tex->id();
 }
 
 unsigned int nvglImageHandleGL3(NVGcontext *ctx, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
-  auto tex = gl->findTexture(image);
+  auto tex = gl->getRenderer()->findTexture(image);
   return tex->handle();
 }

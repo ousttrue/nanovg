@@ -1,51 +1,22 @@
 #pragma once
+#include "call.h"
 #include "nanovg.h"
+#include "renderer.h"
 #include <list>
 #include <memory>
 #include <unordered_map>
 #include <vector>
 
-struct GLNVGblend {
-  unsigned int srcRGB;
-  unsigned int dstRGB;
-  unsigned int srcAlpha;
-  unsigned int dstAlpha;
-};
-
-struct GLNVGcall {
-  int type;
-  int image;
-  int pathOffset;
-  int pathCount;
-  int triangleOffset;
-  int triangleCount;
-  int uniformOffset;
-  GLNVGblend blendFunc;
-};
-
-struct GLNVGpath {
-  int fillOffset;
-  int fillCount;
-  int strokeOffset;
-  int strokeCount;
-};
-
+class Renderer;
 class GLNVGcontext {
-  std::shared_ptr<class GLNVGshader> _shader;
-  std::unordered_map<int, std::shared_ptr<class GLNVGtexture>> _textures;
+  std::shared_ptr<Renderer> _renderer;
 
   float _view[2] = {};
-  int _fragSize = {};
-
-  unsigned int _vertBuf = {};
-  unsigned int _vertArr = {};
-  unsigned int _fragBuf = {};
 
   int _flags = {};
-  int _dummyTex = {};
 
   // Per frame buffers
-  std::list<GLNVGcall> _calls;
+  std::vector<GLNVGcall> _calls;
   std::vector<GLNVGpath> _paths;
   NVGvertex *_verts = {};
   int _nverts = {};
@@ -54,26 +25,16 @@ class GLNVGcontext {
   int _cuniforms = {};
   int _nuniforms = {};
 
-  // cached state
-  unsigned int _boundTexture = {};
-  unsigned int _stencilMask = {};
-  unsigned int _stencilFunc = {};
-  int _stencilFuncRef = {};
-  unsigned int _stencilFuncMask = {};
-  GLNVGblend _blendFunc = {};
-
 public:
   GLNVGcontext(int flags) : _flags(flags){};
   ~GLNVGcontext();
+  const std::shared_ptr<Renderer> &getRenderer() const { return _renderer; }
   void clear();
   void setViewSize(int width, int height) {
     _view[0] = width;
     _view[1] = height;
   }
   bool initialize();
-  void registerTexture(const std::shared_ptr<GLNVGtexture> &tex);
-  std::shared_ptr<GLNVGtexture> findTexture(int id);
-  bool deleteTexture(int id);
   void render();
   void callFill(NVGpaint *paint, NVGcompositeOperationState compositeOperation,
                 NVGscissor *scissor, float fringe, const float *bounds,
@@ -86,7 +47,6 @@ public:
                      NVGcompositeOperationState compositeOperation,
                      NVGscissor *scissor, const NVGvertex *verts, int nverts,
                      float fringe);
-
 private:
   int flags() const { return _flags; }
   GLNVGcall *glnvg__allocCall();
@@ -108,7 +68,4 @@ private:
   void glnvg__stroke(GLNVGcall *call);
   void glnvg__triangles(GLNVGcall *call);
   void glnvg__setUniforms(int uniformOffset, int image);
-  void glnvg__bindTexture(unsigned int tex);
-  void glnvg__stencilMask(unsigned int mask);
-  void glnvg__stencilFunc(unsigned int func, int ref, unsigned int mask);
 };
