@@ -181,11 +181,11 @@ bool GLNVGcontext::initialize() {
   return 1;
 }
 
-void GLNVGcontext::register_texture(const std::shared_ptr<GLNVGtexture> &tex) {
+void GLNVGcontext::registerTexture(const std::shared_ptr<GLNVGtexture> &tex) {
   _textures.insert(std::make_pair(tex->id(), tex));
 }
 
-std::shared_ptr<GLNVGtexture> GLNVGcontext::glnvg__findTexture(int id) {
+std::shared_ptr<GLNVGtexture> GLNVGcontext::findTexture(int id) {
   auto found = _textures.find(id);
   if (found != _textures.end()) {
     return found->second;
@@ -242,7 +242,7 @@ int GLNVGcontext::glnvg__allocFragUniforms(int n) {
   return ret;
 }
 
-bool GLNVGcontext::glnvg__deleteTexture(int id) {
+bool GLNVGcontext::deleteTexture(int id) {
   auto found = _textures.find(id);
   if (found != _textures.end()) {
     _textures.erase(found);
@@ -529,7 +529,7 @@ int GLNVGcontext::glnvg__convertPaint(GLNVGfragUniforms *frag, NVGpaint *paint,
   frag->strokeThr = strokeThr;
 
   if (paint->image != 0) {
-    tex = glnvg__findTexture(paint->image);
+    tex = findTexture(paint->image);
     if (tex == NULL)
       return 0;
     if ((tex->flags() & NVG_IMAGE_FLIPY) != 0) {
@@ -702,11 +702,11 @@ void GLNVGcontext::glnvg__setUniforms(int uniformOffset, int image) {
                     uniformOffset, sizeof(GLNVGfragUniforms));
 
   if (image != 0) {
-    tex = glnvg__findTexture(image);
+    tex = findTexture(image);
   }
   // If no image is set, use empty texture
   if (tex == NULL) {
-    tex = glnvg__findTexture(_dummyTex);
+    tex = findTexture(_dummyTex);
   }
   glnvg__bindTexture(tex ? tex->handle() : 0);
   glnvg__checkError("tex paint tex");

@@ -19,19 +19,19 @@ static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
   if (!tex) {
     return 0;
   }
-  gl->register_texture(tex);
+  gl->registerTexture(tex);
   return tex->id();
 }
 
 static int glnvg__renderDeleteTexture(void *uptr, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  return gl->glnvg__deleteTexture(image);
+  return gl->deleteTexture(image);
 }
 
 static int glnvg__renderUpdateTexture(void *uptr, int image, int x, int y,
                                       int w, int h, const unsigned char *data) {
   auto gl = (GLNVGcontext *)uptr;
-  auto tex = gl->glnvg__findTexture(image);
+  auto tex = gl->findTexture(image);
   if (!tex)
     return 0;
   tex->update(x, y, w, h, data);
@@ -40,7 +40,7 @@ static int glnvg__renderUpdateTexture(void *uptr, int image, int x, int y,
 
 static int glnvg__renderGetTextureSize(void *uptr, int image, int *w, int *h) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  auto tex = gl->glnvg__findTexture(image);
+  auto tex = gl->findTexture(image);
   if (!tex)
     return 0;
   *w = tex->width();
@@ -52,7 +52,7 @@ static void glnvg__renderViewport(void *uptr, float width, float height,
                                   float devicePixelRatio) {
   NVG_NOTUSED(devicePixelRatio);
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  gl->set_viewsize(width, height);
+  gl->setViewSize(width, height);
 }
 
 static void glnvg__renderCancel(void *uptr) {
@@ -134,12 +134,12 @@ int nvglCreateImageFromHandleGL3(NVGcontext *ctx, GLuint textureId, int w,
   auto tex = GLNVGtexture::fromHandle(textureId, w, h, imageFlags);
   if (!tex)
     return 0;
-  gl->register_texture(tex);
+  gl->registerTexture(tex);
   return tex->id();
 }
 
 GLuint nvglImageHandleGL3(NVGcontext *ctx, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
-  auto tex = gl->glnvg__findTexture(image);
+  auto tex = gl->findTexture(image);
   return tex->handle();
 }

@@ -65,26 +65,15 @@ class GLNVGcontext {
 public:
   GLNVGcontext(int flags) : _flags(flags){};
   ~GLNVGcontext();
-  int flags() const { return _flags; }
   void clear();
-  void glnvg__checkError(const char *str);
-  void set_viewsize(int width, int height) {
+  void setViewSize(int width, int height) {
     _view[0] = width;
     _view[1] = height;
   }
   bool initialize();
-  void register_texture(const std::shared_ptr<GLNVGtexture> &tex);
-  std::shared_ptr<GLNVGtexture> glnvg__findTexture(int id);
-  GLNVGcall *glnvg__allocCall();
-  int glnvg__allocPaths(int n);
-  int glnvg__allocVerts(int n);
-  int glnvg__allocFragUniforms(int n);
-  GLNVGpath &get_path(size_t index) { return _paths[index]; }
-  NVGvertex &get_vertex(size_t index) { return _verts[index]; }
-  struct GLNVGfragUniforms *nvg__fragUniformPtr(int i) {
-    return (GLNVGfragUniforms *)&_uniforms[i];
-  }
-  bool glnvg__deleteTexture(int id);
+  void registerTexture(const std::shared_ptr<GLNVGtexture> &tex);
+  std::shared_ptr<GLNVGtexture> findTexture(int id);
+  bool deleteTexture(int id);
   void render();
   void callFill(NVGpaint *paint, NVGcompositeOperationState compositeOperation,
                 NVGscissor *scissor, float fringe, const float *bounds,
@@ -99,6 +88,17 @@ public:
                      float fringe);
 
 private:
+  int flags() const { return _flags; }
+  GLNVGcall *glnvg__allocCall();
+  int glnvg__allocPaths(int n);
+  int glnvg__allocVerts(int n);
+  int glnvg__allocFragUniforms(int n);
+  GLNVGpath &get_path(size_t index) { return _paths[index]; }
+  NVGvertex &get_vertex(size_t index) { return _verts[index]; }
+  struct GLNVGfragUniforms *nvg__fragUniformPtr(int i) {
+    return (GLNVGfragUniforms *)&_uniforms[i];
+  }
+  void glnvg__checkError(const char *str);
   int glnvg__convertPaint(GLNVGfragUniforms *frag, NVGpaint *paint,
                           NVGscissor *scissor, float width, float fringe,
                           float strokeThr);
