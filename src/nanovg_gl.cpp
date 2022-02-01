@@ -35,6 +35,22 @@ static NVGcolor glnvg__premulColor(NVGcolor c) {
   return c;
 }
 
+static int glnvg__maxVertCount(const NVGpath *paths, int npaths) {
+  int i, count = 0;
+  for (i = 0; i < npaths; i++) {
+    count += paths[i].nfill;
+    count += paths[i].nstroke;
+  }
+  return count;
+}
+
+static void glnvg__vset(NVGvertex *vtx, float x, float y, float u, float v) {
+  vtx->x = x;
+  vtx->y = y;
+  vtx->u = u;
+  vtx->v = v;
+}
+
 struct GLNVGblend {
   GLenum srcRGB;
   GLenum dstRGB;
@@ -84,17 +100,20 @@ struct GLNVGfragUniforms {
   int type;
 };
 
-struct GLNVGcontext {
+class GLNVGcontext {
   GLNVGshader _shader = {};
   std::unordered_map<int, std::shared_ptr<GLNVGtexture>> _textures;
+
+public:
   float _view[2] = {};
+  int _fragSize = {};
+
+private:
   GLuint _vertBuf = {};
   GLuint _vertArr = {};
   GLuint _fragBuf = {};
-  int _fragSize = {};
-  int _flags = {};
 
-private:
+  int _flags = {};
   // Per frame buffers
   std::list<GLNVGcall> _calls;
   std::vector<GLNVGpath> _paths;
@@ -113,10 +132,10 @@ private:
   GLuint _stencilFuncMask = {};
   GLNVGblend _blendFunc = {};
 
-public:
   int _dummyTex = {};
 
 public:
+  GLNVGcontext(int flags) : _flags(flags) {}
   ~GLNVGcontext() {
     if (_fragBuf != 0)
       glDeleteBuffers(1, &_fragBuf);
@@ -127,7 +146,7 @@ public:
 
     free(_uniforms);
   }
-
+  int flags() const { return _flags; }
   void clear() {
     _nverts = 0;
     _paths.clear();
@@ -144,6 +163,11 @@ public:
       printf("Error %08x after %s\n", err, str);
       return;
     }
+  }
+
+  void set_viewsize(int width, int height) {
+    _view[0] = width;
+    _view[1] = height;
   }
 
   bool initialize() {
@@ -187,6 +211,10 @@ public:
     return 1;
   }
 
+  void register_texture(const std::shared_ptr<GLNVGtexture> &tex) {
+    _textures.insert(std::make_pair(tex->id(), tex));
+  }
+
   std::shared_ptr<GLNVGtexture> glnvg__findTexture(int id) {
     auto found = _textures.find(id);
     if (found != _textures.end()) {
@@ -227,7 +255,8 @@ public:
   }
 
   int glnvg__allocFragUniforms(int n) {
-    int ret = 0, structSize = _fragSize;
+    int ret = 0;
+    int structSize = _fragSize;
     if (_nuniforms + n > _cuniforms) {
       unsigned char *uniforms;
       int cuniforms = glnvg__maxi(_nuniforms + n, 128) +
@@ -524,7 +553,7 @@ static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
   if (!tex) {
     return 0;
   }
-  gl->_textures.insert(std::make_pair(tex->id(), tex));
+  gl->register_texture(tex);
   return tex->id();
 }
 
@@ -627,8 +656,7 @@ static void glnvg__renderViewport(void *uptr, float width, float height,
                                   float devicePixelRatio) {
   NVG_NOTUSED(devicePixelRatio);
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  gl->_view[0] = width;
-  gl->_view[1] = height;
+  gl->set_viewsize(width, height);
 }
 
 static void glnvg__renderCancel(void *uptr) {
@@ -682,22 +710,6 @@ glnvg__blendCompositeOperation(NVGcompositeOperationState op) {
 static void glnvg__renderFlush(void *uptr) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
   gl->render();
-}
-
-static int glnvg__maxVertCount(const NVGpath *paths, int npaths) {
-  int i, count = 0;
-  for (i = 0; i < npaths; i++) {
-    count += paths[i].nfill;
-    count += paths[i].nstroke;
-  }
-  return count;
-}
-
-static void glnvg__vset(NVGvertex *vtx, float x, float y, float u, float v) {
-  vtx->x = x;
-  vtx->y = y;
-  vtx->u = u;
-  vtx->v = v;
 }
 
 static void glnvg__renderFill(void *uptr, NVGpaint *paint,
@@ -822,7 +834,7 @@ static void glnvg__renderStroke(void *uptr, NVGpaint *paint,
     }
   }
 
-  if (gl->_flags & NVG_STENCIL_STROKES) {
+  if (gl->flags() & NVG_STENCIL_STROKES) {
     // Fill shader
     call->uniformOffset = gl->glnvg__allocFragUniforms(2);
     if (call->uniformOffset == -1)
@@ -884,8 +896,11 @@ static void glnvg__renderDelete(void *uptr) {
   delete gl;
 }
 
+///
+/// public interafce
+///
 NVGcontext *nvgCreateGL3(int flags) {
-  auto gl = new GLNVGcontext;
+  auto gl = new GLNVGcontext(flags);
   if (!gl)
     goto error;
 
@@ -905,8 +920,6 @@ NVGcontext *nvgCreateGL3(int flags) {
   params.renderDelete = glnvg__renderDelete;
   params.userPtr = gl;
   params.edgeAntiAlias = flags & NVG_ANTIALIAS ? 1 : 0;
-
-  gl->_flags = flags;
 
   NVGcontext *ctx = NULL;
   ctx = nvgCreateInternal(&params);
@@ -930,7 +943,7 @@ int nvglCreateImageFromHandleGL3(NVGcontext *ctx, GLuint textureId, int w,
   auto tex = GLNVGtexture::fromHandle(textureId, w, h, imageFlags);
   if (!tex)
     return 0;
-  gl->_textures.insert(std::make_pair(tex->id(), tex));
+  gl->register_texture(tex);
   return tex->id();
 }
 
