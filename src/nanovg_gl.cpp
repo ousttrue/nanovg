@@ -13,6 +13,28 @@
 
 static int glnvg__maxi(int a, int b) { return a > b ? a : b; }
 
+static void glnvg__xformToMat3x4(float *m3, float *t) {
+  m3[0] = t[0];
+  m3[1] = t[1];
+  m3[2] = 0.0f;
+  m3[3] = 0.0f;
+  m3[4] = t[2];
+  m3[5] = t[3];
+  m3[6] = 0.0f;
+  m3[7] = 0.0f;
+  m3[8] = t[4];
+  m3[9] = t[5];
+  m3[10] = 1.0f;
+  m3[11] = 0.0f;
+}
+
+static NVGcolor glnvg__premulColor(NVGcolor c) {
+  c.r *= c.a;
+  c.g *= c.a;
+  c.b *= c.a;
+  return c;
+}
+
 struct GLNVGblend {
   GLenum srcRGB;
   GLenum dstRGB;
@@ -122,6 +144,47 @@ public:
       printf("Error %08x after %s\n", err, str);
       return;
     }
+  }
+
+  bool initialize() {
+
+    int align = 4;
+
+    // glnvg__checkError("init");
+
+    if (!_shader.createShader(_flags & NVG_ANTIALIAS)) {
+      return 0;
+    }
+
+    // glnvg__checkError("uniform locations");
+    _shader.getUniforms();
+
+    // Create dynamic vertex array
+    glGenVertexArrays(1, &_vertArr);
+    glGenBuffers(1, &_vertBuf);
+
+    // Create UBOs
+    _shader.blockBind();
+    glGenBuffers(1, &_fragBuf);
+    glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &align);
+    _fragSize =
+        sizeof(GLNVGfragUniforms) + align - sizeof(GLNVGfragUniforms) % align;
+
+    // Some platforms does not allow to have samples to unset textures.
+    // Create empty one which is bound when there's no texture specified.
+    {
+      auto tex = GLNVGtexture::load(1, 1, NVG_TEXTURE_ALPHA, NULL, 0);
+      assert(tex);
+      _textures.insert(std::make_pair(tex->id(), tex));
+      _dummyTex = tex->id();
+      // glnvg__renderCreateTexture(gl, NVG_TEXTURE_ALPHA, 1, 1, 0, NULL);
+    }
+
+    // glnvg__checkError("create done");
+
+    glFinish();
+
+    return 1;
   }
 
   std::shared_ptr<GLNVGtexture> glnvg__findTexture(int id) {
@@ -445,47 +508,12 @@ private:
   }
 };
 
-static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
-                                      int imageFlags,
-                                      const unsigned char *data);
-
+///
+///
+///
 static int glnvg__renderCreate(void *uptr) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  int align = 4;
-
-  // glnvg__checkError("init");
-
-  if (!gl->_shader.createShader(gl->_flags & NVG_ANTIALIAS)) {
-    return 0;
-  }
-
-  // glnvg__checkError("uniform locations");
-  gl->_shader.getUniforms();
-
-  // Create dynamic vertex array
-  glGenVertexArrays(1, &gl->_vertArr);
-  glGenBuffers(1, &gl->_vertBuf);
-
-  // Create UBOs
-  gl->_shader.blockBind();
-  glGenBuffers(1, &gl->_fragBuf);
-  glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &align);
-  gl->_fragSize =
-      sizeof(GLNVGfragUniforms) + align - sizeof(GLNVGfragUniforms) % align;
-
-  auto s = sizeof(GLNVGfragUniforms);
-  assert(s == gl->_fragSize);
-
-  // Some platforms does not allow to have samples to unset textures.
-  // Create empty one which is bound when there's no texture specified.
-  gl->_dummyTex =
-      glnvg__renderCreateTexture(gl, NVG_TEXTURE_ALPHA, 1, 1, 0, NULL);
-
-  // glnvg__checkError("create done");
-
-  glFinish();
-
-  return 1;
+  return gl->initialize();
 }
 
 static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
@@ -524,28 +552,6 @@ static int glnvg__renderGetTextureSize(void *uptr, int image, int *w, int *h) {
   *w = tex->width();
   *h = tex->height();
   return 1;
-}
-
-static void glnvg__xformToMat3x4(float *m3, float *t) {
-  m3[0] = t[0];
-  m3[1] = t[1];
-  m3[2] = 0.0f;
-  m3[3] = 0.0f;
-  m3[4] = t[2];
-  m3[5] = t[3];
-  m3[6] = 0.0f;
-  m3[7] = 0.0f;
-  m3[8] = t[4];
-  m3[9] = t[5];
-  m3[10] = 1.0f;
-  m3[11] = 0.0f;
-}
-
-static NVGcolor glnvg__premulColor(NVGcolor c) {
-  c.r *= c.a;
-  c.g *= c.a;
-  c.b *= c.a;
-  return c;
 }
 
 static int glnvg__convertPaint(GLNVGcontext *gl, GLNVGfragUniforms *frag,
