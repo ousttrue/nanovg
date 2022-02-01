@@ -1,8 +1,6 @@
 #pragma once
 #include "call.h"
 #include "nanovg.h"
-#include "renderer.h"
-#include <list>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -10,9 +8,7 @@
 class Renderer;
 class GLNVGcontext {
   std::shared_ptr<Renderer> _renderer;
-
   float _view[2] = {};
-
   int _flags = {};
 
   // Per frame buffers
@@ -58,14 +54,7 @@ private:
   struct GLNVGfragUniforms *nvg__fragUniformPtr(int i) {
     return (GLNVGfragUniforms *)&_uniforms[i];
   }
-  void glnvg__checkError(const char *str);
   int glnvg__convertPaint(GLNVGfragUniforms *frag, NVGpaint *paint,
                           NVGscissor *scissor, float width, float fringe,
                           float strokeThr);
-  void glnvg__blendFuncSeparate(const GLNVGblend *blend);
-  void glnvg__fill(GLNVGcall *call);
-  void glnvg__convexFill(GLNVGcall *call);
-  void glnvg__stroke(GLNVGcall *call);
-  void glnvg__triangles(GLNVGcall *call);
-  void glnvg__setUniforms(int uniformOffset, int image);
 };
