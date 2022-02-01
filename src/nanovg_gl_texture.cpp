@@ -1,6 +1,7 @@
 #include "nanovg_gl_texture.h"
-#include "nanovg_gl.h"
 #include "nanovg.h"
+#include "nanovg_gl.h"
+#include <glad/glad.h>
 
 GLNVGtexture::GLNVGtexture() {
   static int s_textureId = 0;
@@ -12,6 +13,9 @@ GLNVGtexture::~GLNVGtexture() {
     glDeleteTextures(1, &_handle);
   }
 }
+
+void GLNVGtexture::bind() { glBindTexture(GL_TEXTURE_2D, _handle); }
+void GLNVGtexture::unbind() { glBindTexture(GL_TEXTURE_2D, 0); }
 
 std::shared_ptr<GLNVGtexture>
 GLNVGtexture::load(int w, int h, int type, const void *data, int imageFlags) {

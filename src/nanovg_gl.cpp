@@ -128,7 +128,7 @@ NVGcontext *nvgCreateGL3(int flags) {
 
 void nvgDeleteGL3(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
 
-int nvglCreateImageFromHandleGL3(NVGcontext *ctx, GLuint textureId, int w,
+int nvglCreateImageFromHandleGL3(NVGcontext *ctx, unsigned int textureId, int w,
                                  int h, int imageFlags) {
   auto gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
   auto tex = GLNVGtexture::fromHandle(textureId, w, h, imageFlags);
@@ -138,7 +138,7 @@ int nvglCreateImageFromHandleGL3(NVGcontext *ctx, GLuint textureId, int w,
   return tex->id();
 }
 
-GLuint nvglImageHandleGL3(NVGcontext *ctx, int image) {
+unsigned int nvglImageHandleGL3(NVGcontext *ctx, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
   auto tex = gl->findTexture(image);
   return tex->handle();
