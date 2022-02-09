@@ -7,8 +7,7 @@
 #include <stdio.h>
 
 int main() {
-  NVGcontext *vg = nullptr;
-  GPUtimer gpuTimer;
+
   PerfGraph fps, cpuGraph, gpuGraph;
 
   initGraph(&fps, GRAPH_RENDER_FPS, "Frame Time");
@@ -23,7 +22,7 @@ int main() {
 #ifdef DEMO_MSAA
   vg = nvgCreateGL3(NVG_STENCIL_STROKES | NVG_DEBUG);
 #else
-  vg = nvgCreateGL3(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
+  auto vg = nvgCreateGL3(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
 #endif
   if (vg == nullptr) {
     // printf("Could not init nanovg.\n");
@@ -36,7 +35,7 @@ int main() {
       return -1;
     }
 
-    initGPUTimer(&gpuTimer);
+    GPUtimer gpuTimer;
 
     auto prevt = app.now();
     double mx, my;
@@ -50,7 +49,7 @@ int main() {
       prevt = t;
 
       float gpuTimes[3];
-      startGPUTimer(&gpuTimer);
+      gpuTimer.startGPUTimer();
 
       // clear
       glViewport(0, 0, fbWidth, fbHeight);
@@ -68,8 +67,9 @@ int main() {
 
       renderGraph(vg, 5, 5, &fps);
       renderGraph(vg, 5 + 200 + 5, 5, &cpuGraph);
-      if (gpuTimer.supported)
+      if (gpuTimer.supported) {
         renderGraph(vg, 5 + 200 + 5 + 200 + 5, 5, &gpuGraph);
+      }
 
       nvgEndFrame(vg);
 
@@ -81,7 +81,7 @@ int main() {
       updateGraph(&cpuGraph, cpuTime);
 
       // We may get multiple results.
-      int n = stopGPUTimer(&gpuTimer, gpuTimes, 3);
+      int n = gpuTimer.stopGPUTimer(gpuTimes, 3);
       for (int i = 0; i < n; i++)
         updateGraph(&gpuGraph, gpuTimes[i]);
 
