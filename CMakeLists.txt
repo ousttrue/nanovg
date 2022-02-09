@@ -54,9 +54,9 @@ target_include_directories(${TARGET_NAME} PUBLIC src)
 set(TARGET_NAME example_gl3)
 add_executable(
   ${TARGET_NAME}
-  example/example_gl3.c
-  example/demo.c
-  example/perf.c
+  example/example_gl3.cpp
+  example/demo.cpp
+  example/perf.cpp
   src/nanovg_gl.cpp
   src/nanovg_gl_shader.cpp
   src/nanovg_gl_texture.cpp
