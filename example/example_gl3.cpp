@@ -4,15 +4,8 @@
 #include "nanovg_gl.h"
 #include "perf.h"
 #include <glad/glad.h>
-#include <stdio.h>
 
 int main() {
-
-  PerfGraph fps, cpuGraph, gpuGraph;
-
-  initGraph(&fps, GRAPH_RENDER_FPS, "Frame Time");
-  initGraph(&cpuGraph, GRAPH_RENDER_MS, "CPU Time");
-  initGraph(&gpuGraph, GRAPH_RENDER_MS, "GPU Time");
 
   GlfwApp app;
   if (!app.createWindow()) {
@@ -35,6 +28,9 @@ int main() {
       return -1;
     }
 
+    PerfGraph fps(GRAPH_RENDER_FPS, "Frame Time");
+    PerfGraph cpuGraph(GRAPH_RENDER_MS, "CPU Time");
+    PerfGraph gpuGraph(GRAPH_RENDER_MS, "GPU Time");
     GPUtimer gpuTimer;
 
     auto prevt = app.now();
@@ -65,10 +61,10 @@ int main() {
 
       data.render(mx, my, winWidth, winHeight, t, blowup);
 
-      renderGraph(vg, 5, 5, &fps);
-      renderGraph(vg, 5 + 200 + 5, 5, &cpuGraph);
+      fps.renderGraph(vg, 5, 5);
+      cpuGraph.renderGraph(vg, 5 + 200 + 5, 5);
       if (gpuTimer.supported) {
-        renderGraph(vg, 5 + 200 + 5 + 200 + 5, 5, &gpuGraph);
+        gpuGraph.renderGraph(vg, 5 + 200 + 5 + 200 + 5, 5);
       }
 
       nvgEndFrame(vg);
@@ -77,13 +73,13 @@ int main() {
       // for GPU)
       auto cpuTime = app.now() - t;
 
-      updateGraph(&fps, dt);
-      updateGraph(&cpuGraph, cpuTime);
+      fps.updateGraph(dt);
+      cpuGraph.updateGraph(cpuTime);
 
       // We may get multiple results.
       int n = gpuTimer.stopGPUTimer(gpuTimes, 3);
       for (int i = 0; i < n; i++)
-        updateGraph(&gpuGraph, gpuTimes[i]);
+        gpuGraph.updateGraph(gpuTimes[i]);
 
       if (screenshot) {
         screenshot = 0;
@@ -95,10 +91,6 @@ int main() {
   }
 
   nvgDeleteGL3(vg);
-
-  printf("Average Frame Time: %.2f ms\n", getGraphAverage(&fps) * 1000.0f);
-  printf("          CPU Time: %.2f ms\n", getGraphAverage(&cpuGraph) * 1000.0f);
-  printf("          GPU Time: %.2f ms\n", getGraphAverage(&gpuGraph) * 1000.0f);
 
   return 0;
 }

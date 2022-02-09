@@ -1,9 +1,9 @@
 #include "perf.h"
+#include "nanovg.h"
+#include <glad/glad.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#include "nanovg.h"
-#include <glad/glad.h>
 
 #ifdef _MSC_VER
 #define snprintf _snprintf
@@ -49,36 +49,38 @@ int GPUtimer::stopGPUTimer(float *times, int maxTimes) {
   return n;
 }
 
-void initGraph(PerfGraph *fps, int style, const char *name) {
-  memset(fps, 0, sizeof(PerfGraph));
-  fps->style = style;
-  strncpy(fps->name, name, sizeof(fps->name));
-  fps->name[sizeof(fps->name) - 1] = '\0';
+PerfGraph::PerfGraph(int style, const char *name) {
+  this->_style = style;
+  this->_name = name;
 }
 
-void updateGraph(PerfGraph *fps, float frameTime) {
-  fps->head = (fps->head + 1) % GRAPH_HISTORY_COUNT;
-  fps->values[fps->head] = frameTime;
+PerfGraph::~PerfGraph() {
+  printf("Average %s Time: %.2f ms\n", _name.c_str(),
+         getGraphAverage() * 1000.0f);
+  // printf("          CPU Time: %.2f ms\n", cpuGraph.getGraphAverage() *
+  // 1000.0f); printf("          GPU Time: %.2f ms\n",
+  // gpuGraph.getGraphAverage() * 1000.0f);
 }
 
-float getGraphAverage(PerfGraph *fps) {
-  int i;
+void PerfGraph::updateGraph(float frameTime) {
+  _head = (_head + 1) % GRAPH_HISTORY_COUNT;
+  _values[_head] = frameTime;
+}
+
+float PerfGraph::getGraphAverage() {
   float avg = 0;
-  for (i = 0; i < GRAPH_HISTORY_COUNT; i++) {
-    avg += fps->values[i];
+  for (int i = 0; i < GRAPH_HISTORY_COUNT; i++) {
+    avg += _values[i];
   }
   return avg / (float)GRAPH_HISTORY_COUNT;
 }
 
-void renderGraph(NVGcontext *vg, float x, float y, PerfGraph *fps) {
-  int i;
-  float avg, w, h;
-  char str[64];
+void PerfGraph::renderGraph(NVGcontext *vg, float x, float y) {
 
-  avg = getGraphAverage(fps);
+  float avg = getGraphAverage();
 
-  w = 200;
-  h = 35;
+  float w = 200;
+  float h = 35;
 
   nvgBeginPath(vg);
   nvgRect(vg, x, y, w, h);
@@ -87,10 +89,9 @@ void renderGraph(NVGcontext *vg, float x, float y, PerfGraph *fps) {
 
   nvgBeginPath(vg);
   nvgMoveTo(vg, x, y + h);
-  if (fps->style == GRAPH_RENDER_FPS) {
-    for (i = 0; i < GRAPH_HISTORY_COUNT; i++) {
-      float v = 1.0f /
-                (0.00001f + fps->values[(fps->head + i) % GRAPH_HISTORY_COUNT]);
+  if (_style == GRAPH_RENDER_FPS) {
+    for (int i = 0; i < GRAPH_HISTORY_COUNT; i++) {
+      float v = 1.0f / (0.00001f + _values[(_head + i) % GRAPH_HISTORY_COUNT]);
       float vx, vy;
       if (v > 80.0f)
         v = 80.0f;
@@ -98,9 +99,9 @@ void renderGraph(NVGcontext *vg, float x, float y, PerfGraph *fps) {
       vy = y + h - ((v / 80.0f) * h);
       nvgLineTo(vg, vx, vy);
     }
-  } else if (fps->style == GRAPH_RENDER_PERCENT) {
-    for (i = 0; i < GRAPH_HISTORY_COUNT; i++) {
-      float v = fps->values[(fps->head + i) % GRAPH_HISTORY_COUNT] * 1.0f;
+  } else if (_style == GRAPH_RENDER_PERCENT) {
+    for (int i = 0; i < GRAPH_HISTORY_COUNT; i++) {
+      float v = _values[(_head + i) % GRAPH_HISTORY_COUNT] * 1.0f;
       float vx, vy;
       if (v > 100.0f)
         v = 100.0f;
@@ -109,8 +110,8 @@ void renderGraph(NVGcontext *vg, float x, float y, PerfGraph *fps) {
       nvgLineTo(vg, vx, vy);
     }
   } else {
-    for (i = 0; i < GRAPH_HISTORY_COUNT; i++) {
-      float v = fps->values[(fps->head + i) % GRAPH_HISTORY_COUNT] * 1000.0f;
+    for (int i = 0; i < GRAPH_HISTORY_COUNT; i++) {
+      float v = _values[(_head + i) % GRAPH_HISTORY_COUNT] * 1000.0f;
       float vx, vy;
       if (v > 20.0f)
         v = 20.0f;
@@ -125,17 +126,18 @@ void renderGraph(NVGcontext *vg, float x, float y, PerfGraph *fps) {
 
   nvgFontFace(vg, "sans");
 
-  if (fps->name[0] != '\0') {
+  if (_name[0] != '\0') {
     nvgFontSize(vg, 12.0f);
     nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
     nvgFillColor(vg, nvgRGBA(240, 240, 240, 192));
-    nvgText(vg, x + 3, y + 3, fps->name, NULL);
+    nvgText(vg, x + 3, y + 3, _name.c_str(), NULL);
   }
 
-  if (fps->style == GRAPH_RENDER_FPS) {
+  if (_style == GRAPH_RENDER_FPS) {
     nvgFontSize(vg, 15.0f);
     nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
     nvgFillColor(vg, nvgRGBA(240, 240, 240, 255));
+    char str[64];
     sprintf(str, "%.2f FPS", 1.0f / avg);
     nvgText(vg, x + w - 3, y + 3, str, NULL);
 
@@ -144,16 +146,18 @@ void renderGraph(NVGcontext *vg, float x, float y, PerfGraph *fps) {
     nvgFillColor(vg, nvgRGBA(240, 240, 240, 160));
     sprintf(str, "%.2f ms", avg * 1000.0f);
     nvgText(vg, x + w - 3, y + h - 3, str, NULL);
-  } else if (fps->style == GRAPH_RENDER_PERCENT) {
+  } else if (_style == GRAPH_RENDER_PERCENT) {
     nvgFontSize(vg, 15.0f);
     nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
     nvgFillColor(vg, nvgRGBA(240, 240, 240, 255));
+    char str[64];
     sprintf(str, "%.1f %%", avg * 1.0f);
     nvgText(vg, x + w - 3, y + 3, str, NULL);
   } else {
     nvgFontSize(vg, 15.0f);
     nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
     nvgFillColor(vg, nvgRGBA(240, 240, 240, 255));
+    char str[64];
     sprintf(str, "%.2f ms", avg * 1000.0f);
     nvgText(vg, x + w - 3, y + 3, str, NULL);
   }

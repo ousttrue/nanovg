@@ -1,5 +1,6 @@
 #pragma once
 #include "nanovg.h"
+#include <string>
 
 enum GraphrenderStyle {
   GRAPH_RENDER_FPS,
@@ -8,18 +9,19 @@ enum GraphrenderStyle {
 };
 
 #define GRAPH_HISTORY_COUNT 100
-struct PerfGraph {
-  int style;
-  char name[32];
-  float values[GRAPH_HISTORY_COUNT];
-  int head;
-};
-typedef struct PerfGraph PerfGraph;
+class PerfGraph {
+  int _style = 0;
+  std::string _name;
+  float _values[GRAPH_HISTORY_COUNT] = {0};
+  int _head = 0;
 
-void initGraph(PerfGraph *fps, int style, const char *name);
-void updateGraph(PerfGraph *fps, float frameTime);
-void renderGraph(NVGcontext *vg, float x, float y, PerfGraph *fps);
-float getGraphAverage(PerfGraph *fps);
+public:
+  PerfGraph(int style, const char *name);
+  ~PerfGraph();
+  void updateGraph(float frameTime);
+  void renderGraph(NVGcontext *vg, float x, float y);
+  float getGraphAverage();
+};
 
 #define GPU_QUERY_COUNT 5
 class GPUtimer {
