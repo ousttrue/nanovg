@@ -1,26 +1,22 @@
-#ifndef DEMO_H
-#define DEMO_H
+#pragma once
 
+#include "example/demo.h"
 #include "nanovg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+struct NVGcontext;
+class DemoData {
+  NVGcontext *_vg = nullptr;
+  int _fontNormal = 0;
+  int _fontBold = 0;
+  int _fontIcons = 0;
+  int _fontEmoji = 0;
+  int _images[12] = {};
 
-struct DemoData {
-	int fontNormal, fontBold, fontIcons, fontEmoji;
-	int images[12];
+public:
+  DemoData(NVGcontext *vg);
+  ~DemoData();
+  bool load();
+  void render(float mx, float my, float width, float height, float t,
+              int blowup);
+  void saveScreenShot(int w, int h, int premult, const char *name);
 };
-typedef struct DemoData DemoData;
-
-int loadDemoData(NVGcontext* vg, DemoData* data);
-void freeDemoData(NVGcontext* vg, DemoData* data);
-void renderDemo(NVGcontext* vg, float mx, float my, float width, float height, float t, int blowup, DemoData* data);
-
-void saveScreenShot(int w, int h, int premult, const char* name);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // DEMO_H

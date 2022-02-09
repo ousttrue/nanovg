@@ -7,7 +7,6 @@
 #include <stdio.h>
 
 int main() {
-  DemoData data;
   NVGcontext *vg = nullptr;
   GPUtimer gpuTimer;
   PerfGraph fps, cpuGraph, gpuGraph;
@@ -31,65 +30,69 @@ int main() {
     return -1;
   }
 
-  if (loadDemoData(vg, &data) == -1)
-    return -1;
-
-  initGPUTimer(&gpuTimer);
-
-  auto prevt = app.now();
-  double mx, my;
-  int winWidth, winHeight;
-  int fbWidth, fbHeight;
-  while (app.beginFrame(&mx, &my, &winWidth, &winHeight, &fbWidth, &fbHeight)) {
-
-    auto t = app.now();
-    auto dt = t - prevt;
-    prevt = t;
-
-    float gpuTimes[3];
-    startGPUTimer(&gpuTimer);
-
-    // clear
-    glViewport(0, 0, fbWidth, fbHeight);
-    if (premult)
-      glClearColor(0, 0, 0, 0);
-    else
-      glClearColor(0.3f, 0.3f, 0.32f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-    auto pxRatio = (float)fbWidth / (float)winWidth;
-    nvgBeginFrame(vg, winWidth, winHeight, pxRatio);
-
-    renderDemo(vg, mx, my, winWidth, winHeight, t, blowup, &data);
-
-    renderGraph(vg, 5, 5, &fps);
-    renderGraph(vg, 5 + 200 + 5, 5, &cpuGraph);
-    if (gpuTimer.supported)
-      renderGraph(vg, 5 + 200 + 5 + 200 + 5, 5, &gpuGraph);
-
-    nvgEndFrame(vg);
-
-    // Measure the CPU time taken excluding swap buffers (as the swap may wait
-    // for GPU)
-    auto cpuTime = app.now() - t;
-
-    updateGraph(&fps, dt);
-    updateGraph(&cpuGraph, cpuTime);
-
-    // We may get multiple results.
-    int n = stopGPUTimer(&gpuTimer, gpuTimes, 3);
-    for (int i = 0; i < n; i++)
-      updateGraph(&gpuGraph, gpuTimes[i]);
-
-    if (screenshot) {
-      screenshot = 0;
-      saveScreenShot(fbWidth, fbHeight, premult, "dump.png");
+  {
+    DemoData data(vg);
+    if (!data.load()) {
+      return -1;
     }
 
-    app.endFrame();
-  }
+    initGPUTimer(&gpuTimer);
 
-  freeDemoData(vg, &data);
+    auto prevt = app.now();
+    double mx, my;
+    int winWidth, winHeight;
+    int fbWidth, fbHeight;
+    while (
+        app.beginFrame(&mx, &my, &winWidth, &winHeight, &fbWidth, &fbHeight)) {
+
+      auto t = app.now();
+      auto dt = t - prevt;
+      prevt = t;
+
+      float gpuTimes[3];
+      startGPUTimer(&gpuTimer);
+
+      // clear
+      glViewport(0, 0, fbWidth, fbHeight);
+      if (premult)
+        glClearColor(0, 0, 0, 0);
+      else
+        glClearColor(0.3f, 0.3f, 0.32f, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
+              GL_STENCIL_BUFFER_BIT);
+
+      auto pxRatio = (float)fbWidth / (float)winWidth;
+      nvgBeginFrame(vg, winWidth, winHeight, pxRatio);
+
+      data.render(mx, my, winWidth, winHeight, t, blowup);
+
+      renderGraph(vg, 5, 5, &fps);
+      renderGraph(vg, 5 + 200 + 5, 5, &cpuGraph);
+      if (gpuTimer.supported)
+        renderGraph(vg, 5 + 200 + 5 + 200 + 5, 5, &gpuGraph);
+
+      nvgEndFrame(vg);
+
+      // Measure the CPU time taken excluding swap buffers (as the swap may wait
+      // for GPU)
+      auto cpuTime = app.now() - t;
+
+      updateGraph(&fps, dt);
+      updateGraph(&cpuGraph, cpuTime);
+
+      // We may get multiple results.
+      int n = stopGPUTimer(&gpuTimer, gpuTimes, 3);
+      for (int i = 0; i < n; i++)
+        updateGraph(&gpuGraph, gpuTimes[i]);
+
+      if (screenshot) {
+        screenshot = 0;
+        data.saveScreenShot(fbWidth, fbHeight, premult, "dump.png");
+      }
+
+      app.endFrame();
+    }
+  }
 
   nvgDeleteGL3(vg);
 
