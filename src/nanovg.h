@@ -676,10 +676,10 @@ struct NVGparams {
 typedef struct NVGparams NVGparams;
 
 // Constructor and destructor, called by the render back-end.
-NVGcontext* nvgCreateInternal(NVGparams* params);
-void nvgDeleteInternal(NVGcontext* ctx);
+NVGcontext* nvgCreate(NVGparams* params);
+void nvgDelete(NVGcontext* ctx);
 
-NVGparams* nvgInternalParams(NVGcontext* ctx);
+NVGparams* nvgParams(NVGcontext* ctx);
 
 // Debug function to dump cached path data.
 void nvgDebugDumpPathCache(NVGcontext* ctx);

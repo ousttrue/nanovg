@@ -122,16 +122,16 @@ NVGcontext *nvgCreateGL3(int flags) {
   params.userPtr = new GLNVGcontext(flags);
   params.edgeAntiAlias = flags & NVG_ANTIALIAS ? 1 : 0;
 
-  auto ctx = nvgCreateInternal(&params);
+  auto ctx = nvgCreate(&params);
   assert(ctx);
   return ctx;
 }
 
-void nvgDeleteGL3(NVGcontext *ctx) { nvgDeleteInternal(ctx); }
+void nvgDeleteGL3(NVGcontext *ctx) { nvgDelete(ctx); }
 
 int nvglCreateImageFromHandleGL3(NVGcontext *ctx, unsigned int textureId, int w,
                                  int h, int imageFlags) {
-  auto gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
+  auto gl = (GLNVGcontext *)nvgParams(ctx)->userPtr;
   auto tex = GLNVGtexture::fromHandle(textureId, w, h, imageFlags);
   if (!tex)
     return 0;
@@ -140,13 +140,13 @@ int nvglCreateImageFromHandleGL3(NVGcontext *ctx, unsigned int textureId, int w,
 }
 
 unsigned int nvglImageHandleGL3(NVGcontext *ctx, int image) {
-  GLNVGcontext *gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
+  GLNVGcontext *gl = (GLNVGcontext *)nvgParams(ctx)->userPtr;
   auto tex = gl->getRenderer()->findTexture(image);
   return tex->handle();
 }
 
 NVGdrawData *nvgGetDrawData(struct NVGcontext *ctx)
 {
-  auto gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
+  auto gl = (GLNVGcontext *)nvgParams(ctx)->userPtr;
   return gl->drawdata();
 }

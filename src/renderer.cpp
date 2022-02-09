@@ -391,7 +391,7 @@ GLNVGblend glnvg__blendCompositeOperation(NVGcompositeOperationState op) {
 
 #include "nanovg_gl_context.h"
 void RenderDrawData(struct NVGcontext *ctx, NVGdrawData *data) {
-  auto gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
+  auto gl = (GLNVGcontext *)nvgParams(ctx)->userPtr;
   gl->render();
   gl->clear();
 }

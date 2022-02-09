@@ -286,7 +286,7 @@ static NVGstate* nvg__getState(NVGcontext* ctx)
 	return &ctx->states[ctx->nstates-1];
 }
 
-NVGcontext* nvgCreateInternal(NVGparams* params)
+NVGcontext* nvgCreate(NVGparams* params)
 {
 	FONSparams fontParams;
 	NVGcontext* ctx = (NVGcontext*)malloc(sizeof(NVGcontext));
@@ -334,16 +334,16 @@ NVGcontext* nvgCreateInternal(NVGparams* params)
 	return ctx;
 
 error:
-	nvgDeleteInternal(ctx);
+	nvgDelete(ctx);
 	return 0;
 }
 
-NVGparams* nvgInternalParams(NVGcontext* ctx)
+NVGparams* nvgParams(NVGcontext* ctx)
 {
     return &ctx->params;
 }
 
-void nvgDeleteInternal(NVGcontext* ctx)
+void nvgDelete(NVGcontext* ctx)
 {
 	int i;
 	if (ctx == NULL) return;
