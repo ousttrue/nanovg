@@ -1,7 +1,9 @@
 #pragma once
 #include "nanovg.h"
+#include <memory>
 
-struct GLNVGfragUniforms {
+struct GLNVGfragUniforms
+{
   float scissorMat[12]; // matrices are actually 3 vec4s
   float paintMat[12];
   struct NVGcolor innerCol;
@@ -17,7 +19,8 @@ struct GLNVGfragUniforms {
   int type;
 };
 
-enum GLNVGcallType {
+enum GLNVGcallType
+{
   GLNVG_NONE = 0,
   GLNVG_FILL,
   GLNVG_CONVEXFILL,
@@ -25,14 +28,16 @@ enum GLNVGcallType {
   GLNVG_TRIANGLES,
 };
 
-struct GLNVGblend {
+struct GLNVGblend
+{
   unsigned int srcRGB;
   unsigned int dstRGB;
   unsigned int srcAlpha;
   unsigned int dstAlpha;
 };
 
-struct GLNVGcall {
+struct GLNVGcall
+{
   int type;
   int image;
   int pathOffset;
@@ -43,14 +48,23 @@ struct GLNVGcall {
   struct GLNVGblend blendFunc;
 };
 
-struct GLNVGpath {
+struct GLNVGpath
+{
   int fillOffset;
   int fillCount;
   int strokeOffset;
   int strokeCount;
 };
 
-struct NVGdrawData {
-  GLNVGcall *data;
-  size_t count;
+struct NVGdrawData
+{
+  float view[2];
+  GLNVGcall *drawData;
+  size_t drawCount;
+  void *pUniform;
+  int uniformByteSize;
+  NVGvertex *pVertex;
+  int vertexCount;
+  GLNVGpath *pPath;
+  std::shared_ptr<class TextureManager> textureManager;
 };

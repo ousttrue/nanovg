@@ -21,10 +21,11 @@ int main()
   }
 
 #ifdef DEMO_MSAA
-  nvgInitGL3(vg, NVG_STENCIL_STROKES | NVG_DEBUG);
+  auto flags = NVG_STENCIL_STROKES | NVG_DEBUG;
 #else
-  nvgInitGL3(vg, NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
+  auto flags = NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG;
 #endif
+  nvgInitGL3(vg, flags);
 
   {
     DemoData data(vg);
@@ -32,6 +33,8 @@ int main()
     {
       return -1;
     }
+
+    auto renderer = Renderer::create(flags & NVG_ANTIALIAS);
 
     PerfGraph fps(GRAPH_RENDER_FPS, "Frame Time");
     PerfGraph cpuGraph(GRAPH_RENDER_MS, "CPU Time");
@@ -74,7 +77,7 @@ int main()
         gpuGraph.renderGraph(vg, 5 + 200 + 5 + 200 + 5, 5);
       }
 
-      RenderDrawData(vg, nvgGetDrawData(vg));
+      renderer->render(nvgGetDrawData(vg));
 
       // Measure the CPU time taken excluding swap buffers (as the swap may wait
       // for GPU)

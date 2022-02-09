@@ -58,7 +58,7 @@ add_executable(
   src/nanovg_gl_shader.cpp
   src/nanovg_gl_texture.cpp
   src/nanovg_gl_context.cpp
-  src/renderer.cpp
+  example/renderer.cpp
   example/example_gl3.cpp
   example/GlfwApp.cpp
   example/demo.cpp

@@ -1,7 +1,9 @@
 #pragma once
+#include <unordered_map>
 #include <memory>
 
-class GLNVGtexture {
+class GLNVGtexture
+{
   int _id = {};
   unsigned int _handle = {};
   int _width = {};
@@ -26,4 +28,17 @@ public:
   int height() const { return _height; }
   int flags() const { return _flags; }
   int type() const { return _type; }
+};
+
+class TextureManager
+{
+  std::unordered_map<int, std::shared_ptr<GLNVGtexture>> _textures;
+  int _dummyTex = {};
+
+public:
+  TextureManager();
+  void registerTexture(const std::shared_ptr<GLNVGtexture> &tex);
+  std::shared_ptr<GLNVGtexture> findTexture(int id);
+  bool deleteTexture(int id);
+  void bind(int image);
 };

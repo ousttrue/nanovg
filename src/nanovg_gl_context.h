@@ -5,10 +5,11 @@
 #include <unordered_map>
 #include <vector>
 
-class Renderer;
-class GLNVGcontext {
-  std::shared_ptr<Renderer> _renderer;
-  float _view[2] = {};
+class TextureManager;
+class GLNVGcontext
+{
+  std::shared_ptr<TextureManager> _texture;
+  NVGdrawData _drawdata;
   int _flags = {};
 
   // Per frame buffers
@@ -20,19 +21,18 @@ class GLNVGcontext {
   unsigned char *_uniforms = {};
   int _cuniforms = {};
   int _nuniforms = {};
-  NVGdrawData _drawdata;
 
 public:
   GLNVGcontext(int flags) : _flags(flags){};
   ~GLNVGcontext();
-  const std::shared_ptr<Renderer> &getRenderer() const { return _renderer; }
+  const std::shared_ptr<TextureManager> &getTextureManager() const { return _texture; }
   void clear();
-  void setViewSize(int width, int height) {
-    _view[0] = width;
-    _view[1] = height;
+  void setViewSize(int width, int height)
+  {
+    _drawdata.view[0] = width;
+    _drawdata.view[1] = height;
   }
   bool initialize();
-  void render();
   void callFill(NVGpaint *paint, NVGcompositeOperationState compositeOperation,
                 NVGscissor *scissor, float fringe, const float *bounds,
                 const NVGpath *paths, int npaths);
@@ -45,9 +45,16 @@ public:
                      NVGscissor *scissor, const NVGvertex *verts, int nverts,
                      float fringe);
 
-  NVGdrawData *drawdata() {
-    _drawdata.data = _calls.data();
-    _drawdata.count = _calls.size();
+  NVGdrawData *drawdata()
+  {
+    _drawdata.drawData = _calls.data();
+    _drawdata.drawCount = _calls.size();
+    _drawdata.pUniform = _uniforms;
+    _drawdata.uniformByteSize = _nuniforms * 256; // _renderer->fragSize();
+    _drawdata.pVertex = _verts;
+    _drawdata.vertexCount = _nverts;
+    _drawdata.pPath = _paths.data();
+    _drawdata.textureManager = _texture;
     return &_drawdata;
   }
 
@@ -59,7 +66,8 @@ private:
   int glnvg__allocFragUniforms(int n);
   GLNVGpath &get_path(size_t index) { return _paths[index]; }
   NVGvertex &get_vertex(size_t index) { return _verts[index]; }
-  struct GLNVGfragUniforms *nvg__fragUniformPtr(int i) {
+  struct GLNVGfragUniforms *nvg__fragUniformPtr(int i)
+  {
     return (GLNVGfragUniforms *)&_uniforms[i];
   }
   int glnvg__convertPaint(GLNVGfragUniforms *frag, NVGpaint *paint,

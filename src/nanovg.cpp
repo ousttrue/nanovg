@@ -30,6 +30,8 @@
 #include "stb_image.h"
 #endif 
 
+#include "nanovg_gl_context.h"
+
 #ifdef _MSC_VER
 #pragma warning(disable: 4100)  // unreferenced formal parameter
 #pragma warning(disable: 4127)  // conditional expression is constant
@@ -384,6 +386,10 @@ void nvgDelete(NVGcontext* ctx)
 void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float devicePixelRatio)
 {
 	_initialize(ctx);
+
+	auto gl = (GLNVGcontext *)nvgParams(ctx)->userPtr;
+	gl->clear();
+
 /*	printf("Tris: draws:%d  fill:%d  stroke:%d  text:%d  TOT:%d\n",
 		ctx->drawCallCount, ctx->fillTriCount, ctx->strokeTriCount, ctx->textTriCount,
 		ctx->fillTriCount+ctx->strokeTriCount+ctx->textTriCount);*/

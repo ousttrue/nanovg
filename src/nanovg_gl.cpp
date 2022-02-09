@@ -1,7 +1,6 @@
 #include "nanovg_gl.h"
 #include "nanovg_gl_context.h"
 #include "nanovg_gl_texture.h"
-#include "renderer.h"
 #include <assert.h>
 
 ///
@@ -20,19 +19,19 @@ static int glnvg__renderCreateTexture(void *uptr, int type, int w, int h,
   if (!tex) {
     return 0;
   }
-  gl->getRenderer()->registerTexture(tex);
+  gl->getTextureManager()->registerTexture(tex);
   return tex->id();
 }
 
 static int glnvg__renderDeleteTexture(void *uptr, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  return gl->getRenderer()->deleteTexture(image);
+  return gl->getTextureManager()->deleteTexture(image);
 }
 
 static int glnvg__renderUpdateTexture(void *uptr, int image, int x, int y,
                                       int w, int h, const unsigned char *data) {
   auto gl = (GLNVGcontext *)uptr;
-  auto tex = gl->getRenderer()->findTexture(image);
+  auto tex = gl->getTextureManager()->findTexture(image);
   if (!tex)
     return 0;
   tex->update(x, y, w, h, data);
@@ -41,7 +40,7 @@ static int glnvg__renderUpdateTexture(void *uptr, int image, int x, int y,
 
 static int glnvg__renderGetTextureSize(void *uptr, int image, int *w, int *h) {
   GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  auto tex = gl->getRenderer()->findTexture(image);
+  auto tex = gl->getTextureManager()->findTexture(image);
   if (!tex)
     return 0;
   *w = tex->width();
@@ -62,8 +61,8 @@ static void glnvg__renderCancel(void *uptr) {
 }
 
 static void glnvg__renderFlush(void *uptr) {
-  GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  gl->render();
+  // GLNVGcontext *gl = (GLNVGcontext *)uptr;
+  // gl->render();
 }
 
 static void glnvg__renderFill(void *uptr, NVGpaint *paint,
@@ -130,13 +129,13 @@ int nvglCreateImageFromHandleGL3(NVGcontext *ctx, unsigned int textureId, int w,
   auto tex = GLNVGtexture::fromHandle(textureId, w, h, imageFlags);
   if (!tex)
     return 0;
-  gl->getRenderer()->registerTexture(tex);
+  gl->getTextureManager()->registerTexture(tex);
   return tex->id();
 }
 
 unsigned int nvglImageHandleGL3(NVGcontext *ctx, int image) {
   GLNVGcontext *gl = (GLNVGcontext *)nvgParams(ctx)->userPtr;
-  auto tex = gl->getRenderer()->findTexture(image);
+  auto tex = gl->getTextureManager()->findTexture(image);
   return tex->handle();
 }
 
