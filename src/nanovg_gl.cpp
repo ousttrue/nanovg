@@ -144,3 +144,9 @@ unsigned int nvglImageHandleGL3(NVGcontext *ctx, int image) {
   auto tex = gl->getRenderer()->findTexture(image);
   return tex->handle();
 }
+
+NVGdrawData *nvgGetDrawData(struct NVGcontext *ctx)
+{
+  auto gl = (GLNVGcontext *)nvgInternalParams(ctx)->userPtr;
+  return gl->drawdata();
+}

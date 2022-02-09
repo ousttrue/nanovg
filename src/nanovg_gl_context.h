@@ -1,6 +1,6 @@
 #pragma once
-#include "call.h"
 #include "nanovg.h"
+#include "nanovg_drawdata.h"
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -20,6 +20,7 @@ class GLNVGcontext {
   unsigned char *_uniforms = {};
   int _cuniforms = {};
   int _nuniforms = {};
+  NVGdrawData _drawdata;
 
 public:
   GLNVGcontext(int flags) : _flags(flags){};
@@ -43,6 +44,13 @@ public:
                      NVGcompositeOperationState compositeOperation,
                      NVGscissor *scissor, const NVGvertex *verts, int nverts,
                      float fringe);
+
+  NVGdrawData *drawdata() {
+    _drawdata.data = _calls.data();
+    _drawdata.count = _calls.size();
+    return &_drawdata;
+  }
+
 private:
   int flags() const { return _flags; }
   GLNVGcall *glnvg__allocCall();

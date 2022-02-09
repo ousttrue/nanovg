@@ -3,6 +3,7 @@
 #include "nanovg.h"
 #include "nanovg_gl.h"
 #include "perf.h"
+#include "renderer.h"
 #include <glad/glad.h>
 
 int main() {
@@ -67,7 +68,7 @@ int main() {
         gpuGraph.renderGraph(vg, 5 + 200 + 5 + 200 + 5, 5);
       }
 
-      nvgEndFrame(vg);
+      RenderDrawData(vg, nvgGetDrawData(vg));
 
       // Measure the CPU time taken excluding swap buffers (as the swap may wait
       // for GPU)

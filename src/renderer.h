@@ -1,5 +1,5 @@
 #pragma once
-#include "call.h"
+#include "nanovg_drawdata.h"
 #include <memory>
 #include <unordered_map>
 
@@ -39,3 +39,5 @@ private:
 
 unsigned int glnvg_convertBlendFuncFactor(int factor);
 GLNVGblend glnvg__blendCompositeOperation(NVGcompositeOperationState op);
+
+void RenderDrawData(struct NVGcontext *ctx, NVGdrawData *data);

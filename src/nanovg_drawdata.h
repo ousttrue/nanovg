@@ -49,3 +49,8 @@ struct GLNVGpath {
   int strokeOffset;
   int strokeCount;
 };
+
+struct NVGdrawData {
+  GLNVGcall *data;
+  size_t count;
+};

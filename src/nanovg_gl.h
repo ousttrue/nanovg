@@ -49,6 +49,8 @@ enum NVGimageFlagsGL {
   NVG_IMAGE_NODELETE = 1 << 16, // Do not delete GL texture handle.
 };
 
+struct NVGdrawData *nvgGetDrawData(struct NVGcontext *ctx);
+
 #ifdef __cplusplus
 }
 #endif
