@@ -48,7 +48,7 @@ target_compile_options(${TARGET_NAME} PRIVATE /wd4005)
 target_include_directories(${TARGET_NAME} PUBLIC ${GLFW_DIR}/include)
 
 set(TARGET_NAME nanovg)
-add_library(${TARGET_NAME} src/nanovg.c)
+add_library(${TARGET_NAME} src/nanovg.cpp)
 target_include_directories(${TARGET_NAME} PUBLIC src)
 
 set(TARGET_NAME example_gl3)
