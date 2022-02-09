@@ -6,26 +6,30 @@
 #include "renderer.h"
 #include <glad/glad.h>
 
-int main() {
-
+int main()
+{
   GlfwApp app;
-  if (!app.createWindow()) {
+  if (!app.createWindow())
+  {
     return 1;
   }
 
-#ifdef DEMO_MSAA
-  vg = nvgCreateGL3(NVG_STENCIL_STROKES | NVG_DEBUG);
-#else
-  auto vg = nvgCreateGL3(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
-#endif
-  if (vg == nullptr) {
-    // printf("Could not init nanovg.\n");
-    return -1;
+  auto vg = nvgCreate();
+  if (!vg)
+  {
+    return 2;
   }
+
+#ifdef DEMO_MSAA
+  nvgInitGL3(vg, NVG_STENCIL_STROKES | NVG_DEBUG);
+#else
+  nvgInitGL3(vg, NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
+#endif
 
   {
     DemoData data(vg);
-    if (!data.load()) {
+    if (!data.load())
+    {
       return -1;
     }
 
@@ -39,7 +43,8 @@ int main() {
     int winWidth, winHeight;
     int fbWidth, fbHeight;
     while (
-        app.beginFrame(&mx, &my, &winWidth, &winHeight, &fbWidth, &fbHeight)) {
+        app.beginFrame(&mx, &my, &winWidth, &winHeight, &fbWidth, &fbHeight))
+    {
 
       auto t = app.now();
       auto dt = t - prevt;
@@ -64,7 +69,8 @@ int main() {
 
       fps.renderGraph(vg, 5, 5);
       cpuGraph.renderGraph(vg, 5 + 200 + 5, 5);
-      if (gpuTimer.supported) {
+      if (gpuTimer.supported)
+      {
         gpuGraph.renderGraph(vg, 5 + 200 + 5 + 200 + 5, 5);
       }
 
@@ -82,7 +88,8 @@ int main() {
       for (int i = 0; i < n; i++)
         gpuGraph.updateGraph(gpuTimes[i]);
 
-      if (screenshot) {
+      if (screenshot)
+      {
         screenshot = 0;
         data.saveScreenShot(fbWidth, fbHeight, premult, "dump.png");
       }
@@ -91,7 +98,7 @@ int main() {
     }
   }
 
-  nvgDeleteGL3(vg);
+  nvgDelete(vg);
 
   return 0;
 }

@@ -104,9 +104,10 @@ static void glnvg__renderDelete(void *uptr) {
 ///
 /// public interafce
 ///
-NVGcontext *nvgCreateGL3(int flags) {
-  NVGparams params;
-  memset(&params, 0, sizeof(params));
+void nvgInitGL3(NVGcontext *ctx, int flags) {
+  // NVGparams params;
+  // memset(&params, 0, sizeof(params));
+  auto &params = *nvgParams(ctx);
   params.renderCreate = glnvg__renderCreate;
   params.renderCreateTexture = glnvg__renderCreateTexture;
   params.renderDeleteTexture = glnvg__renderDeleteTexture;
@@ -121,13 +122,7 @@ NVGcontext *nvgCreateGL3(int flags) {
   params.renderDelete = glnvg__renderDelete;
   params.userPtr = new GLNVGcontext(flags);
   params.edgeAntiAlias = flags & NVG_ANTIALIAS ? 1 : 0;
-
-  auto ctx = nvgCreate(&params);
-  assert(ctx);
-  return ctx;
 }
-
-void nvgDeleteGL3(NVGcontext *ctx) { nvgDelete(ctx); }
 
 int nvglCreateImageFromHandleGL3(NVGcontext *ctx, unsigned int textureId, int w,
                                  int h, int imageFlags) {

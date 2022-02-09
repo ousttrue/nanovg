@@ -132,6 +132,7 @@ struct NVGcontext {
 	int fillTriCount;
 	int strokeTriCount;
 	int textTriCount;
+	bool isInit=false;
 };
 
 static float nvg__sqrtf(float a) { return sqrtf(a); }
@@ -286,15 +287,49 @@ static NVGstate* nvg__getState(NVGcontext* ctx)
 	return &ctx->states[ctx->nstates-1];
 }
 
-NVGcontext* nvgCreate(NVGparams* params)
+static void _initialize(NVGcontext* ctx)
 {
+	if(ctx->isInit)
+	{
+		return;
+	}
+	ctx->isInit=true;
+
+	if (ctx->params.renderCreate(ctx->params.userPtr) == 0){
+		return;
+	}
+
+	// Init font rendering
 	FONSparams fontParams;
+	memset(&fontParams, 0, sizeof(fontParams));
+	fontParams.width = NVG_INIT_FONTIMAGE_SIZE;
+	fontParams.height = NVG_INIT_FONTIMAGE_SIZE;
+	fontParams.flags = FONS_ZERO_TOPLEFT;
+	fontParams.renderCreate = NULL;
+	fontParams.renderUpdate = NULL;
+	fontParams.renderDraw = NULL;
+	fontParams.renderDelete = NULL;
+	fontParams.userPtr = NULL;
+	ctx->fs = fonsCreateInternal(&fontParams);
+	if (ctx->fs == NULL){
+		return;
+	}
+
+	// Create font texture
+	ctx->fontImages[0] = ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_ALPHA, fontParams.width, fontParams.height, 0, NULL);
+	if (ctx->fontImages[0] == 0){
+		return;
+	}
+	ctx->fontImageIdx = 0;
+}
+
+NVGcontext* nvgCreate()
+{
 	NVGcontext* ctx = (NVGcontext*)malloc(sizeof(NVGcontext));
 	int i;
 	if (ctx == NULL) goto error;
 	memset(ctx, 0, sizeof(NVGcontext));
 
-	ctx->params = *params;
 	for (i = 0; i < NVG_MAX_FONTIMAGES; i++)
 		ctx->fontImages[i] = 0;
 
@@ -310,26 +345,6 @@ NVGcontext* nvgCreate(NVGparams* params)
 	nvgReset(ctx);
 
 	nvg__setDevicePixelRatio(ctx, 1.0f);
-
-	if (ctx->params.renderCreate(ctx->params.userPtr) == 0) goto error;
-
-	// Init font rendering
-	memset(&fontParams, 0, sizeof(fontParams));
-	fontParams.width = NVG_INIT_FONTIMAGE_SIZE;
-	fontParams.height = NVG_INIT_FONTIMAGE_SIZE;
-	fontParams.flags = FONS_ZERO_TOPLEFT;
-	fontParams.renderCreate = NULL;
-	fontParams.renderUpdate = NULL;
-	fontParams.renderDraw = NULL;
-	fontParams.renderDelete = NULL;
-	fontParams.userPtr = NULL;
-	ctx->fs = fonsCreateInternal(&fontParams);
-	if (ctx->fs == NULL) goto error;
-
-	// Create font texture
-	ctx->fontImages[0] = ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_ALPHA, fontParams.width, fontParams.height, 0, NULL);
-	if (ctx->fontImages[0] == 0) goto error;
-	ctx->fontImageIdx = 0;
 
 	return ctx;
 
@@ -368,6 +383,7 @@ void nvgDelete(NVGcontext* ctx)
 
 void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float devicePixelRatio)
 {
+	_initialize(ctx);
 /*	printf("Tris: draws:%d  fill:%d  stroke:%d  text:%d  TOT:%d\n",
 		ctx->drawCallCount, ctx->fillTriCount, ctx->strokeTriCount, ctx->textTriCount,
 		ctx->fillTriCount+ctx->strokeTriCount+ctx->textTriCount);*/
@@ -824,6 +840,7 @@ int nvgCreateImageMem(NVGcontext* ctx, int imageFlags, unsigned char* data, int 
 
 int nvgCreateImageRGBA(NVGcontext* ctx, int w, int h, int imageFlags, const unsigned char* data)
 {
+	_initialize(ctx);
 	return ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_RGBA, w, h, imageFlags, data);
 }
 

@@ -676,7 +676,7 @@ struct NVGparams {
 typedef struct NVGparams NVGparams;
 
 // Constructor and destructor, called by the render back-end.
-NVGcontext* nvgCreate(NVGparams* params);
+NVGcontext* nvgCreate();
 void nvgDelete(NVGcontext* ctx);
 
 NVGparams* nvgParams(NVGcontext* ctx);
