@@ -55,6 +55,7 @@ set(TARGET_NAME example_gl3)
 add_executable(
   ${TARGET_NAME}
   example/example_gl3.cpp
+  example/GlfwApp.cpp
   example/demo.cpp
   example/perf.cpp
   src/nanovg_gl.cpp
