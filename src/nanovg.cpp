@@ -113,25 +113,27 @@ struct NVGpathCache {
 typedef struct NVGpathCache NVGpathCache;
 
 struct NVGcontext {
-	NVGparams params;
-	float* commands;
-	int ccommands;
-	int ncommands;
-	float commandx, commandy;
-	NVGstate states[NVG_MAX_STATES];
-	int nstates;
-	NVGpathCache* cache;
-	float tessTol;
-	float distTol;
-	float fringeWidth;
-	float devicePxRatio;
-	struct FONScontext* fs;
-	int fontImages[NVG_MAX_FONTIMAGES];
-	int fontImageIdx;
-	int drawCallCount;
-	int fillTriCount;
-	int strokeTriCount;
-	int textTriCount;
+	NVGparams params={};
+	float* commands={};
+	int ccommands={};
+	int ncommands={};
+	float commandx={};
+	float commandy={};
+	NVGstate states[NVG_MAX_STATES]={};
+	int nstates={};
+	NVGpathCache* cache={};
+	float tessTol={};
+	float distTol={};
+	float fringeWidth={};
+	float devicePxRatio={};
+	struct FONScontext* fs={};
+	int fontImages[NVG_MAX_FONTIMAGES]={};
+	int fontImageIdx={};
+	int drawCallCount={};
+	int fillTriCount={};
+	int strokeTriCount={};
+	int textTriCount={};
+	bool isInit=false;
 };
 
 static float nvg__sqrtf(float a) { return sqrtf(a); }
@@ -208,9 +210,9 @@ static void nvg__setDevicePixelRatio(NVGcontext* ctx, float ratio)
 	ctx->devicePxRatio = ratio;
 }
 
-static NVGcompositeOperationState nvg__compositeOperationState(int op)
+static NVGcompositeOperationState nvg__compositeOperationState(NVGcompositeOperation op)
 {
-	int sfactor, dfactor;
+	NVGblendFactor sfactor, dfactor;
 
 	if (op == NVG_SOURCE_OVER)
 	{
@@ -286,16 +288,48 @@ static NVGstate* nvg__getState(NVGcontext* ctx)
 	return &ctx->states[ctx->nstates-1];
 }
 
-NVGcontext* nvgCreateInternal(NVGparams* params)
+static void _initialize(NVGcontext* ctx)
 {
-	FONSparams fontParams;
-	NVGcontext* ctx = (NVGcontext*)malloc(sizeof(NVGcontext));
-	int i;
-	if (ctx == NULL) goto error;
-	memset(ctx, 0, sizeof(NVGcontext));
+	if(ctx->isInit)
+	{
+		return;
+	}
+	ctx->isInit=true;
 
-	ctx->params = *params;
-	for (i = 0; i < NVG_MAX_FONTIMAGES; i++)
+	// Init font rendering
+	FONSparams fontParams;
+	memset(&fontParams, 0, sizeof(fontParams));
+	fontParams.width = NVG_INIT_FONTIMAGE_SIZE;
+	fontParams.height = NVG_INIT_FONTIMAGE_SIZE;
+	fontParams.flags = FONS_ZERO_TOPLEFT;
+	fontParams.renderCreate = NULL;
+	fontParams.renderUpdate = NULL;
+	fontParams.renderDraw = NULL;
+	fontParams.renderDelete = NULL;
+	fontParams.userPtr = NULL;
+	ctx->fs = fonsCreateInternal(&fontParams);
+	if (ctx->fs == NULL){
+		return;
+	}
+
+	// Create font texture
+	ctx->fontImages[0] = ctx->params.renderCreateTexture(&ctx->params, NVG_TEXTURE_ALPHA, fontParams.width, fontParams.height, 0, NULL);
+	if (ctx->fontImages[0] == 0){
+		return;
+	}
+	ctx->fontImageIdx = 0;
+}
+
+NVGcontext* nvgCreate(int flags)
+{
+	auto ctx = new NVGcontext;
+	if (ctx == NULL) goto error;
+	// memset(ctx, 0, sizeof(NVGcontext));
+
+	ctx->params._flags = flags;
+	ctx->params.edgeAntiAlias = flags & NVG_ANTIALIAS ? 1 : 0;
+
+	for (int i = 0; i < NVG_MAX_FONTIMAGES; i++)
 		ctx->fontImages[i] = 0;
 
 	ctx->commands = (float*)malloc(sizeof(float)*NVG_INIT_COMMANDS_SIZE);
@@ -311,63 +345,42 @@ NVGcontext* nvgCreateInternal(NVGparams* params)
 
 	nvg__setDevicePixelRatio(ctx, 1.0f);
 
-	if (ctx->params.renderCreate(ctx->params.userPtr) == 0) goto error;
-
-	// Init font rendering
-	memset(&fontParams, 0, sizeof(fontParams));
-	fontParams.width = NVG_INIT_FONTIMAGE_SIZE;
-	fontParams.height = NVG_INIT_FONTIMAGE_SIZE;
-	fontParams.flags = FONS_ZERO_TOPLEFT;
-	fontParams.renderCreate = NULL;
-	fontParams.renderUpdate = NULL;
-	fontParams.renderDraw = NULL;
-	fontParams.renderDelete = NULL;
-	fontParams.userPtr = NULL;
-	ctx->fs = fonsCreateInternal(&fontParams);
-	if (ctx->fs == NULL) goto error;
-
-	// Create font texture
-	ctx->fontImages[0] = ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_ALPHA, fontParams.width, fontParams.height, 0, NULL);
-	if (ctx->fontImages[0] == 0) goto error;
-	ctx->fontImageIdx = 0;
-
 	return ctx;
 
 error:
-	nvgDeleteInternal(ctx);
+	nvgDelete(ctx);
 	return 0;
 }
 
-NVGparams* nvgInternalParams(NVGcontext* ctx)
+NVGparams* nvgParams(NVGcontext* ctx)
 {
     return &ctx->params;
 }
 
-void nvgDeleteInternal(NVGcontext* ctx)
+void nvgDelete(NVGcontext* ctx)
 {
-	int i;
-	if (ctx == NULL) return;
+	if (!ctx) return;
 	if (ctx->commands != NULL) free(ctx->commands);
 	if (ctx->cache != NULL) nvg__deletePathCache(ctx->cache);
 
 	if (ctx->fs)
 		fonsDeleteInternal(ctx->fs);
 
-	for (i = 0; i < NVG_MAX_FONTIMAGES; i++) {
+	for (int i = 0; i < NVG_MAX_FONTIMAGES; i++) {
 		if (ctx->fontImages[i] != 0) {
 			nvgDeleteImage(ctx, ctx->fontImages[i]);
 			ctx->fontImages[i] = 0;
 		}
 	}
 
-	if (ctx->params.renderDelete != NULL)
-		ctx->params.renderDelete(ctx->params.userPtr);
-
 	free(ctx);
 }
 
 void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float devicePixelRatio)
 {
+	_initialize(ctx);
+	nvgParams(ctx)->clear();
+
 /*	printf("Tris: draws:%d  fill:%d  stroke:%d  text:%d  TOT:%d\n",
 		ctx->drawCallCount, ctx->fillTriCount, ctx->strokeTriCount, ctx->textTriCount,
 		ctx->fillTriCount+ctx->strokeTriCount+ctx->textTriCount);*/
@@ -378,7 +391,7 @@ void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float
 
 	nvg__setDevicePixelRatio(ctx, devicePixelRatio);
 
-	ctx->params.renderViewport(ctx->params.userPtr, windowWidth, windowHeight, devicePixelRatio);
+	ctx->params.setViewSize(windowWidth, windowHeight);
 
 	ctx->drawCallCount = 0;
 	ctx->fillTriCount = 0;
@@ -388,38 +401,38 @@ void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float
 
 void nvgCancelFrame(NVGcontext* ctx)
 {
-	ctx->params.renderCancel(ctx->params.userPtr);
+	ctx->params.clear();
 }
 
-void nvgEndFrame(NVGcontext* ctx)
-{
-	ctx->params.renderFlush(ctx->params.userPtr);
-	if (ctx->fontImageIdx != 0) {
-		int fontImage = ctx->fontImages[ctx->fontImageIdx];
-		int i, j, iw, ih;
-		// delete images that smaller than current one
-		if (fontImage == 0)
-			return;
-		nvgImageSize(ctx, fontImage, &iw, &ih);
-		for (i = j = 0; i < ctx->fontImageIdx; i++) {
-			if (ctx->fontImages[i] != 0) {
-				int nw, nh;
-				nvgImageSize(ctx, ctx->fontImages[i], &nw, &nh);
-				if (nw < iw || nh < ih)
-					nvgDeleteImage(ctx, ctx->fontImages[i]);
-				else
-					ctx->fontImages[j++] = ctx->fontImages[i];
-			}
-		}
-		// make current font image to first
-		ctx->fontImages[j++] = ctx->fontImages[0];
-		ctx->fontImages[0] = fontImage;
-		ctx->fontImageIdx = 0;
-		// clear all images after j
-		for (i = j; i < NVG_MAX_FONTIMAGES; i++)
-			ctx->fontImages[i] = 0;
-	}
-}
+// void nvgEndFrame(NVGcontext* ctx)
+// {
+// 	ctx->params.renderFlush(&ctx->params);
+// 	if (ctx->fontImageIdx != 0) {
+// 		int fontImage = ctx->fontImages[ctx->fontImageIdx];
+// 		int i, j, iw, ih;
+// 		// delete images that smaller than current one
+// 		if (fontImage == 0)
+// 			return;
+// 		nvgImageSize(ctx, fontImage, &iw, &ih);
+// 		for (i = j = 0; i < ctx->fontImageIdx; i++) {
+// 			if (ctx->fontImages[i] != 0) {
+// 				int nw, nh;
+// 				nvgImageSize(ctx, ctx->fontImages[i], &nw, &nh);
+// 				if (nw < iw || nh < ih)
+// 					nvgDeleteImage(ctx, ctx->fontImages[i]);
+// 				else
+// 					ctx->fontImages[j++] = ctx->fontImages[i];
+// 			}
+// 		}
+// 		// make current font image to first
+// 		ctx->fontImages[j++] = ctx->fontImages[0];
+// 		ctx->fontImages[0] = fontImage;
+// 		ctx->fontImageIdx = 0;
+// 		// clear all images after j
+// 		for (i = j; i < NVG_MAX_FONTIMAGES; i++)
+// 			ctx->fontImages[i] = 0;
+// 	}
+// }
 
 NVGcolor nvgRGB(unsigned char r, unsigned char g, unsigned char b)
 {
@@ -824,24 +837,26 @@ int nvgCreateImageMem(NVGcontext* ctx, int imageFlags, unsigned char* data, int 
 
 int nvgCreateImageRGBA(NVGcontext* ctx, int w, int h, int imageFlags, const unsigned char* data)
 {
-	return ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_RGBA, w, h, imageFlags, data);
+	_initialize(ctx);
+	return ctx->params.renderCreateTexture(&ctx->params, NVG_TEXTURE_RGBA, w, h, imageFlags, data);
 }
 
 void nvgUpdateImage(NVGcontext* ctx, int image, const unsigned char* data)
 {
-	int w, h;
-	ctx->params.renderGetTextureSize(ctx->params.userPtr, image, &w, &h);
-	ctx->params.renderUpdateTexture(ctx->params.userPtr, image, 0,0, w,h, data);
+	auto info = ctx->params.renderGetTexture(&ctx->params, image);
+	ctx->params.renderUpdateTexture(&ctx->params, image, 0,0, info->_width, info->_height, data);
 }
 
 void nvgImageSize(NVGcontext* ctx, int image, int* w, int* h)
 {
-	ctx->params.renderGetTextureSize(ctx->params.userPtr, image, w, h);
+	auto info = ctx->params.renderGetTexture(&ctx->params, image);
+	*w = info->_width;
+	*h = info->_height;
 }
 
 void nvgDeleteImage(NVGcontext* ctx, int image)
 {
-	ctx->params.renderDeleteTexture(ctx->params.userPtr, image);
+	ctx->params.renderDeleteTexture(&ctx->params, image);
 }
 
 NVGpaint nvgLinearGradient(NVGcontext* ctx,
@@ -1027,7 +1042,7 @@ void nvgResetScissor(NVGcontext* ctx)
 }
 
 // Global composite operation.
-void nvgGlobalCompositeOperation(NVGcontext* ctx, int op)
+void nvgGlobalCompositeOperation(NVGcontext* ctx, NVGcompositeOperation op)
 {
 	NVGstate* state = nvg__getState(ctx);
 	state->compositeOperation = nvg__compositeOperationState(op);
@@ -1041,10 +1056,10 @@ void nvgGlobalCompositeBlendFunc(NVGcontext* ctx, int sfactor, int dfactor)
 void nvgGlobalCompositeBlendFuncSeparate(NVGcontext* ctx, int srcRGB, int dstRGB, int srcAlpha, int dstAlpha)
 {
 	NVGcompositeOperationState op;
-	op.srcRGB = srcRGB;
-	op.dstRGB = dstRGB;
-	op.srcAlpha = srcAlpha;
-	op.dstAlpha = dstAlpha;
+	op.srcRGB = static_cast<NVGblendFactor>(srcRGB);
+	op.dstRGB = static_cast<NVGblendFactor>(dstRGB);
+	op.srcAlpha = static_cast<NVGblendFactor>(srcAlpha);
+	op.dstAlpha = static_cast<NVGblendFactor>(dstAlpha);
 
 	NVGstate* state = nvg__getState(ctx);
 	state->compositeOperation = op;
@@ -2238,7 +2253,7 @@ void nvgFill(NVGcontext* ctx)
 	fillPaint.innerColor.a *= state->alpha;
 	fillPaint.outerColor.a *= state->alpha;
 
-	ctx->params.renderFill(ctx->params.userPtr, &fillPaint, state->compositeOperation, &state->scissor, ctx->fringeWidth,
+	ctx->params.callFill(&fillPaint, state->compositeOperation, &state->scissor, ctx->fringeWidth,
 						   ctx->cache->bounds, ctx->cache->paths, ctx->cache->npaths);
 
 	// Count triangles
@@ -2280,7 +2295,7 @@ void nvgStroke(NVGcontext* ctx)
 	else
 		nvg__expandStroke(ctx, strokeWidth*0.5f, 0.0f, state->lineCap, state->lineJoin, state->miterLimit);
 
-	ctx->params.renderStroke(ctx->params.userPtr, &strokePaint, state->compositeOperation, &state->scissor, ctx->fringeWidth,
+	ctx->params.callStroke(&strokePaint, state->compositeOperation, &state->scissor, ctx->fringeWidth,
 							 strokeWidth, ctx->cache->paths, ctx->cache->npaths);
 
 	// Count triangles
@@ -2407,7 +2422,7 @@ static void nvg__flushTextTexture(NVGcontext* ctx)
 			int y = dirty[1];
 			int w = dirty[2] - dirty[0];
 			int h = dirty[3] - dirty[1];
-			ctx->params.renderUpdateTexture(ctx->params.userPtr, fontImage, x,y, w,h, data);
+			ctx->params.renderUpdateTexture(&ctx->params, fontImage, x,y, w,h, data);
 		}
 	}
 }
@@ -2429,7 +2444,7 @@ static int nvg__allocTextAtlas(NVGcontext* ctx)
 			iw *= 2;
 		if (iw > NVG_MAX_FONTIMAGE_SIZE || ih > NVG_MAX_FONTIMAGE_SIZE)
 			iw = ih = NVG_MAX_FONTIMAGE_SIZE;
-		ctx->fontImages[ctx->fontImageIdx+1] = ctx->params.renderCreateTexture(ctx->params.userPtr, NVG_TEXTURE_ALPHA, iw, ih, 0, NULL);
+		ctx->fontImages[ctx->fontImageIdx+1] = ctx->params.renderCreateTexture(&ctx->params, NVG_TEXTURE_ALPHA, iw, ih, 0, NULL);
 	}
 	++ctx->fontImageIdx;
 	fonsResetAtlas(ctx->fs, iw, ih);
@@ -2448,7 +2463,7 @@ static void nvg__renderText(NVGcontext* ctx, NVGvertex* verts, int nverts)
 	paint.innerColor.a *= state->alpha;
 	paint.outerColor.a *= state->alpha;
 
-	ctx->params.renderTriangles(ctx->params.userPtr, &paint, state->compositeOperation, &state->scissor, verts, nverts, ctx->fringeWidth);
+	ctx->params.callTriangles(&paint, state->compositeOperation, &state->scissor, verts, nverts, ctx->fringeWidth);
 
 	ctx->drawCallCount++;
 	ctx->textTriCount += nverts/3;
@@ -2940,5 +2955,360 @@ void nvgTextMetrics(NVGcontext* ctx, float* ascender, float* descender, float* l
 		*descender *= invscale;
 	if (lineh != NULL)
 		*lineh *= invscale;
+}
+
+static int glnvg__maxi(int a, int b) { return a > b ? a : b; }
+
+static void glnvg__xformToMat3x4(float *m3, float *t) {
+  m3[0] = t[0];
+  m3[1] = t[1];
+  m3[2] = 0.0f;
+  m3[3] = 0.0f;
+  m3[4] = t[2];
+  m3[5] = t[3];
+  m3[6] = 0.0f;
+  m3[7] = 0.0f;
+  m3[8] = t[4];
+  m3[9] = t[5];
+  m3[10] = 1.0f;
+  m3[11] = 0.0f;
+}
+
+static NVGcolor glnvg__premulColor(NVGcolor c) {
+  c.r *= c.a;
+  c.g *= c.a;
+  c.b *= c.a;
+  return c;
+}
+
+static int glnvg__maxVertCount(const NVGpath *paths, int npaths) {
+  int i, count = 0;
+  for (i = 0; i < npaths; i++) {
+    count += paths[i].nfill;
+    count += paths[i].nstroke;
+  }
+  return count;
+}
+
+static void glnvg__vset(NVGvertex *vtx, float x, float y, float u, float v) {
+  vtx->x = x;
+  vtx->y = y;
+  vtx->u = u;
+  vtx->v = v;
+}
+
+// NVGparams::~NVGpaint() { free(_uniforms); }
+void NVGparams::clear() {
+  _nverts = 0;
+  _paths.clear();
+  _calls.clear();
+  _nuniforms = 0;
+}
+
+bool NVGparams::initialize() { return 1; }
+
+GLNVGcall *NVGparams::glnvg__allocCall() {
+  _calls.push_back({});
+  return &_calls.back();
+  // ret = &gl->_calls[gl->_ncalls++];
+  // memset(ret, 0, sizeof(GLNVGcall));
+  // return ret;
+}
+
+int NVGparams::glnvg__allocPaths(int n) {
+  auto ret = _paths.size();
+  _paths.resize(ret + n);
+  return ret;
+}
+
+int NVGparams::glnvg__allocVerts(int n) {
+  int ret = 0;
+  if (_nverts + n > _cverts) {
+    NVGvertex *verts;
+    int cverts =
+        glnvg__maxi(_nverts + n, 4096) + _cverts / 2; // 1.5x Overallocate
+    verts = (NVGvertex *)realloc(_verts, sizeof(NVGvertex) * cverts);
+    if (verts == NULL)
+      return -1;
+    _verts = verts;
+    _cverts = cverts;
+  }
+  ret = _nverts;
+  _nverts += n;
+  return ret;
+}
+
+static int fragSize() { return 256; }
+
+int NVGparams::glnvg__allocFragUniforms(int n) {
+  int ret = 0;
+  int structSize = fragSize();
+  if (_nuniforms + n > _cuniforms) {
+    unsigned char *uniforms;
+    int cuniforms =
+        glnvg__maxi(_nuniforms + n, 128) + _cuniforms / 2; // 1.5x Overallocate
+    uniforms = (unsigned char *)realloc(_uniforms, structSize * cuniforms);
+    if (uniforms == NULL)
+      return -1;
+    _uniforms = uniforms;
+    _cuniforms = cuniforms;
+  }
+  ret = _nuniforms * structSize;
+  _nuniforms += n;
+  return ret;
+}
+
+// void NVGparams::render() {
+
+//   _renderer->render(_view, _calls.data(), _calls.size(), _uniforms,
+//                     _nuniforms * _renderer->fragSize(), _verts, _nverts,
+//                     _paths.data());
+
+//   // Reset calls
+//   clear();
+// }
+
+
+void NVGparams::callFill(NVGpaint *paint,
+                            NVGcompositeOperationState compositeOperation,
+                            NVGscissor *scissor, float fringe,
+                            const float *bounds, const NVGpath *paths,
+                            int npaths) {
+  auto call = glnvg__allocCall();
+  assert(call);
+
+  call->type = GLNVG_FILL;
+  call->triangleCount = 4;
+  call->pathOffset = glnvg__allocPaths(npaths);
+  if (call->pathOffset == -1)
+    return;
+  call->pathCount = npaths;
+  call->image = paint->image;
+  call->blendFunc = compositeOperation;
+
+  if (npaths == 1 && paths[0].convex) {
+    call->type = GLNVG_CONVEXFILL;
+    call->triangleCount =
+        0; // Bounding box fill quad not needed for convex fill
+  }
+
+  // Allocate vertices for all the paths.
+  int maxverts = glnvg__maxVertCount(paths, npaths) + call->triangleCount;
+  int offset = glnvg__allocVerts(maxverts);
+  if (offset == -1)
+    return;
+
+  for (int i = 0; i < npaths; i++) {
+    auto copy = &get_path(call->pathOffset + i);
+    const NVGpath *path = &paths[i];
+    memset(copy, 0, sizeof(GLNVGpath));
+    if (path->nfill > 0) {
+      copy->fillOffset = offset;
+      copy->fillCount = path->nfill;
+      memcpy(&get_vertex(offset), path->fill, sizeof(NVGvertex) * path->nfill);
+      offset += path->nfill;
+    }
+    if (path->nstroke > 0) {
+      copy->strokeOffset = offset;
+      copy->strokeCount = path->nstroke;
+      memcpy(&get_vertex(offset), path->stroke,
+             sizeof(NVGvertex) * path->nstroke);
+      offset += path->nstroke;
+    }
+  }
+
+  // Setup uniforms for draw calls
+  if (call->type == GLNVG_FILL) {
+    // Quad
+    call->triangleOffset = offset;
+    auto quad = &get_vertex(call->triangleOffset);
+    glnvg__vset(&quad[0], bounds[2], bounds[3], 0.5f, 1.0f);
+    glnvg__vset(&quad[1], bounds[2], bounds[1], 0.5f, 1.0f);
+    glnvg__vset(&quad[2], bounds[0], bounds[3], 0.5f, 1.0f);
+    glnvg__vset(&quad[3], bounds[0], bounds[1], 0.5f, 1.0f);
+
+    call->uniformOffset = glnvg__allocFragUniforms(2);
+    if (call->uniformOffset == -1)
+      return;
+    // Simple shader for stencil
+    auto frag = nvg__fragUniformPtr(call->uniformOffset);
+    memset(frag, 0, sizeof(*frag));
+    frag->strokeThr = -1.0f;
+    frag->type = NSVG_SHADER_SIMPLE;
+    // Fill shader
+    glnvg__convertPaint(nvg__fragUniformPtr(call->uniformOffset + fragSize()),
+                        paint, scissor, fringe, fringe, -1.0f);
+  } else {
+    call->uniformOffset = glnvg__allocFragUniforms(1);
+    if (call->uniformOffset == -1)
+      return;
+    // Fill shader
+    glnvg__convertPaint(nvg__fragUniformPtr(call->uniformOffset), paint,
+                        scissor, fringe, fringe, -1.0f);
+  }
+}
+
+void NVGparams::callStroke(NVGpaint *paint,
+                              NVGcompositeOperationState compositeOperation,
+                              NVGscissor *scissor, float fringe,
+                              float strokeWidth, const NVGpath *paths,
+                              int npaths) {
+  GLNVGcall *call = glnvg__allocCall();
+  assert(call);
+  int i, maxverts, offset;
+
+  call->type = GLNVG_STROKE;
+  call->pathOffset = glnvg__allocPaths(npaths);
+  if (call->pathOffset == -1)
+    return;
+  call->pathCount = npaths;
+  call->image = paint->image;
+  call->blendFunc = compositeOperation;
+
+  // Allocate vertices for all the paths.
+  maxverts = glnvg__maxVertCount(paths, npaths);
+  offset = glnvg__allocVerts(maxverts);
+  if (offset == -1)
+    return;
+
+  for (i = 0; i < npaths; i++) {
+    auto copy = &get_path(call->pathOffset + i);
+    const NVGpath *path = &paths[i];
+    memset(copy, 0, sizeof(GLNVGpath));
+    if (path->nstroke) {
+      copy->strokeOffset = offset;
+      copy->strokeCount = path->nstroke;
+      memcpy(&get_vertex(offset), path->stroke,
+             sizeof(NVGvertex) * path->nstroke);
+      offset += path->nstroke;
+    }
+  }
+
+  if (flags() & NVG_STENCIL_STROKES) {
+    // Fill shader
+    call->uniformOffset = glnvg__allocFragUniforms(2);
+    if (call->uniformOffset == -1)
+      return;
+
+    glnvg__convertPaint(nvg__fragUniformPtr(call->uniformOffset), paint,
+                        scissor, strokeWidth, fringe, -1.0f);
+    glnvg__convertPaint(nvg__fragUniformPtr(call->uniformOffset + fragSize()),
+                        paint, scissor, strokeWidth, fringe,
+                        1.0f - 0.5f / 255.0f);
+  } else {
+    // Fill shader
+    call->uniformOffset = glnvg__allocFragUniforms(1);
+    if (call->uniformOffset == -1)
+      return;
+    glnvg__convertPaint(nvg__fragUniformPtr(call->uniformOffset), paint,
+                        scissor, strokeWidth, fringe, -1.0f);
+  }
+}
+
+void NVGparams::callTriangles(NVGpaint *paint,
+                                 NVGcompositeOperationState compositeOperation,
+                                 NVGscissor *scissor, const NVGvertex *verts,
+                                 int nverts, float fringe) {
+  GLNVGcall *call = glnvg__allocCall();
+  GLNVGfragUniforms *frag;
+
+  if (call == NULL)
+    return;
+
+  call->type = GLNVG_TRIANGLES;
+  call->image = paint->image;
+  call->blendFunc = compositeOperation;
+
+  // Allocate vertices for all the paths.
+  call->triangleOffset = glnvg__allocVerts(nverts);
+  if (call->triangleOffset == -1)
+    return;
+  call->triangleCount = nverts;
+
+  memcpy(&get_vertex(call->triangleOffset), verts, sizeof(NVGvertex) * nverts);
+
+  // Fill shader
+  call->uniformOffset = glnvg__allocFragUniforms(1);
+  if (call->uniformOffset == -1)
+    return;
+  frag = nvg__fragUniformPtr(call->uniformOffset);
+  glnvg__convertPaint(frag, paint, scissor, 1.0f, fringe, -1.0f);
+  frag->type = NSVG_SHADER_IMG;
+}
+
+int NVGparams::glnvg__convertPaint(GLNVGfragUniforms *frag, NVGpaint *paint,
+                                      NVGscissor *scissor, float width,
+                                      float fringe, float strokeThr) {
+  float invxform[6];
+
+  memset(frag, 0, sizeof(*frag));
+
+  frag->innerCol = glnvg__premulColor(paint->innerColor);
+  frag->outerCol = glnvg__premulColor(paint->outerColor);
+
+  if (scissor->extent[0] < -0.5f || scissor->extent[1] < -0.5f) {
+    memset(frag->scissorMat, 0, sizeof(frag->scissorMat));
+    frag->scissorExt[0] = 1.0f;
+    frag->scissorExt[1] = 1.0f;
+    frag->scissorScale[0] = 1.0f;
+    frag->scissorScale[1] = 1.0f;
+  } else {
+    nvgTransformInverse(invxform, scissor->xform);
+    glnvg__xformToMat3x4(frag->scissorMat, invxform);
+    frag->scissorExt[0] = scissor->extent[0];
+    frag->scissorExt[1] = scissor->extent[1];
+    frag->scissorScale[0] = sqrtf(scissor->xform[0] * scissor->xform[0] +
+                                  scissor->xform[2] * scissor->xform[2]) /
+                            fringe;
+    frag->scissorScale[1] = sqrtf(scissor->xform[1] * scissor->xform[1] +
+                                  scissor->xform[3] * scissor->xform[3]) /
+                            fringe;
+  }
+
+  memcpy(frag->extent, paint->extent, sizeof(frag->extent));
+  frag->strokeMult = (width * 0.5f + fringe * 0.5f) / fringe;
+  frag->strokeThr = strokeThr;
+
+  if (paint->image != 0) {
+      auto tex = renderGetTexture(this, paint->image);
+      if (tex == NULL)
+        return 0;
+      if ((tex->_flags & NVG_IMAGE_FLIPY) != 0)
+      {
+        float m1[6], m2[6];
+        nvgTransformTranslate(m1, 0.0f, frag->extent[1] * 0.5f);
+        nvgTransformMultiply(m1, paint->xform);
+        nvgTransformScale(m2, 1.0f, -1.0f);
+        nvgTransformMultiply(m2, m1);
+        nvgTransformTranslate(m1, 0.0f, -frag->extent[1] * 0.5f);
+        nvgTransformMultiply(m1, m2);
+        nvgTransformInverse(invxform, m1);
+      }
+      else
+      {
+        nvgTransformInverse(invxform, paint->xform);
+      }
+    	frag->type = NSVG_SHADER_FILLIMG;
+
+      if (tex->_type == NVG_TEXTURE_RGBA)
+        frag->texType = (tex->_flags & NVG_IMAGE_PREMULTIPLIED) ? 0 : 1;
+      else
+        frag->texType = 2;
+      //		printf("frag->texType = %d\n", frag->texType);
+  } else {
+    frag->type = NSVG_SHADER_FILLGRAD;
+    frag->radius = paint->radius;
+    frag->feather = paint->feather;
+    nvgTransformInverse(invxform, paint->xform);
+  }
+
+  glnvg__xformToMat3x4(frag->paintMat, invxform);
+
+  return 1;
+}
+
+NVGdrawData *nvgGetDrawData(struct NVGcontext *ctx)
+{
+  return ctx->params.drawdata();
 }
 // vim: ft=c nu noet ts=4
