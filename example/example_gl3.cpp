@@ -4,7 +4,46 @@
 #include "nanovg_gl.h"
 #include "perf.h"
 #include "renderer.h"
+#include "texture_manager.h"
 #include <glad/glad.h>
+#include <memory>
+
+std::shared_ptr<Renderer> g_renderer;
+
+static int glnvg__renderCreateTexture(struct NVGparams *params, int type, int w, int h,
+                                      int imageFlags,
+                                      const unsigned char *data) {
+  // auto gl = (GLNVGcontext *)uptr;
+  auto tex = GLNVGtexture::load(w, h, type, data, imageFlags);
+  if (!tex) {
+    return 0;
+  }
+  g_renderer->textureManager()->registerTexture(tex);
+  return tex->id();
+}
+
+static int glnvg__renderDeleteTexture(struct NVGparams *params, int image) {
+  // GLNVGcontext *gl = (GLNVGcontext *)uptr;
+  return g_renderer->textureManager()->deleteTexture(image);
+}
+
+static int glnvg__renderUpdateTexture(struct NVGparams *params, int image, int x, int y,
+                                      int w, int h, const unsigned char *data) {
+  // auto gl = (GLNVGcontext *)uptr;
+  auto tex = g_renderer->textureManager()->findTexture(image);
+  if (!tex)
+    return 0;
+  tex->update(x, y, w, h, data);
+  return 1;
+}
+
+static NVGtextureInfo *glnvg__renderGetTexture(struct NVGparams *params, int image) {
+  // GLNVGcontext *gl = (GLNVGcontext *)uptr;
+  auto tex = g_renderer->textureManager()->findTexture(image);
+  if (!tex)
+    return 0;
+  return (NVGtextureInfo*)tex.get();
+}
 
 int main()
 {
@@ -26,15 +65,20 @@ int main()
   auto flags = NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG;
 #endif
   nvgInitGL3(vg, flags);
+  auto params = nvgParams(vg);
+  params->renderCreateTexture = glnvg__renderCreateTexture;
+  params->renderDeleteTexture = glnvg__renderDeleteTexture;
+  params->renderUpdateTexture = glnvg__renderUpdateTexture;
+  params->renderGetTexture = glnvg__renderGetTexture;
 
   {
+    g_renderer = Renderer::create(flags & NVG_ANTIALIAS);
+
     DemoData data(vg);
     if (!data.load())
     {
       return -1;
     }
-
-    auto renderer = Renderer::create(flags & NVG_ANTIALIAS);
 
     PerfGraph fps(GRAPH_RENDER_FPS, "Frame Time");
     PerfGraph cpuGraph(GRAPH_RENDER_MS, "CPU Time");
@@ -77,7 +121,7 @@ int main()
         gpuGraph.renderGraph(vg, 5 + 200 + 5 + 200 + 5, 5);
       }
 
-      renderer->render(nvgGetDrawData(vg));
+      g_renderer->render(nvgGetDrawData(vg));
 
       // Measure the CPU time taken excluding swap buffers (as the swap may wait
       // for GPU)

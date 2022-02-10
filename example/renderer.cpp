@@ -1,7 +1,7 @@
 #include "renderer.h"
 #include "nanovg_gl.h"
 #include "nanovg_gl_shader.h"
-#include "nanovg_gl_texture.h"
+#include "texture_manager.h"
 #include <assert.h>
 #include <glad/glad.h>
 #include <memory>
@@ -13,20 +13,16 @@ int _stencilFuncRef = {};
 unsigned int _stencilFuncMask = {};
 GLNVGblend _blendFunc = {};
 
-static void glnvg__stencilMask(GLuint mask)
-{
-  if (_stencilMask != mask)
-  {
+static void glnvg__stencilMask(GLuint mask) {
+  if (_stencilMask != mask) {
     _stencilMask = mask;
     glStencilMask(mask);
   }
 }
 
-static void glnvg__stencilFunc(GLenum func, GLint ref, GLuint mask)
-{
+static void glnvg__stencilFunc(GLenum func, GLint ref, GLuint mask) {
   if ((_stencilFunc != func) || (_stencilFuncRef != ref) ||
-      (_stencilFuncMask != mask))
-  {
+      (_stencilFuncMask != mask)) {
 
     _stencilFunc = func;
     _stencilFuncRef = ref;
@@ -37,22 +33,20 @@ static void glnvg__stencilFunc(GLenum func, GLint ref, GLuint mask)
 
 // TODO:
 int _flags = 0;
-static void glnvg__checkError(const char *str)
-{
+static void glnvg__checkError(const char *str) {
   GLenum err;
   // if ((_flags & NVG_DEBUG) == 0)
   //   return;
   err = glGetError();
-  if (err != GL_NO_ERROR)
-  {
+  if (err != GL_NO_ERROR) {
     printf("Error %08x after %s\n", err, str);
     return;
   }
 }
 
 Renderer::Renderer(const std::shared_ptr<GLNVGshader> &shader)
-    : _shader(shader)
-{
+    : _shader(shader) {
+  _texture = std::make_shared<TextureManager>();
   glnvg__checkError("init");
   _shader->getUniforms();
   glnvg__checkError("uniform locations");
@@ -74,8 +68,7 @@ Renderer::Renderer(const std::shared_ptr<GLNVGshader> &shader)
   glFinish();
 }
 
-Renderer::~Renderer()
-{
+Renderer::~Renderer() {
   if (_fragBuf != 0)
     glDeleteBuffers(1, &_fragBuf);
   if (_vertArr != 0)
@@ -84,24 +77,20 @@ Renderer::~Renderer()
     glDeleteBuffers(1, &_vertBuf);
 }
 
-std::shared_ptr<Renderer> Renderer::create(bool useAntiAlias)
-{
+std::shared_ptr<Renderer> Renderer::create(bool useAntiAlias) {
   auto shader = GLNVGshader::create(useAntiAlias);
-  if (!shader)
-  {
+  if (!shader) {
     return nullptr;
   }
 
   return std::shared_ptr<Renderer>(new Renderer(shader));
 }
 
-void Renderer::glnvg__blendFuncSeparate(const GLNVGblend *blend)
-{
+void Renderer::glnvg__blendFuncSeparate(const GLNVGblend *blend) {
   if ((_blendFunc.srcRGB != blend->srcRGB) ||
       (_blendFunc.dstRGB != blend->dstRGB) ||
       (_blendFunc.srcAlpha != blend->srcAlpha) ||
-      (_blendFunc.dstAlpha != blend->dstAlpha))
-  {
+      (_blendFunc.dstAlpha != blend->dstAlpha)) {
 
     _blendFunc = *blend;
     glBlendFuncSeparate(blend->srcRGB, blend->dstRGB, blend->srcAlpha,
@@ -109,8 +98,7 @@ void Renderer::glnvg__blendFuncSeparate(const GLNVGblend *blend)
   }
 }
 
-void Renderer::glnvg__fill(const GLNVGcall *call, const GLNVGpath *pPath, const std::shared_ptr<TextureManager> &textureManager)
-{
+void Renderer::glnvg__fill(const GLNVGcall *call, const GLNVGpath *pPath) {
   auto paths = &pPath[call->pathOffset];
   int i, npaths = call->pathCount;
 
@@ -122,7 +110,7 @@ void Renderer::glnvg__fill(const GLNVGcall *call, const GLNVGpath *pPath, const 
 
   // set bindpoint for solid loc
   glnvg__setUniforms(call->uniformOffset);
-  textureManager->bind(0);
+  _texture->bind(0);
   glnvg__checkError("fill simple");
 
   glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP);
@@ -136,11 +124,10 @@ void Renderer::glnvg__fill(const GLNVGcall *call, const GLNVGpath *pPath, const 
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
   glnvg__setUniforms(call->uniformOffset + _fragSize);
-  textureManager->bind(call->image);
+  _texture->bind(call->image);
   glnvg__checkError("fill fill");
 
-  if (_flags & NVG_ANTIALIAS)
-  {
+  if (_flags & NVG_ANTIALIAS) {
     glnvg__stencilFunc(GL_EQUAL, 0x00, 0xff);
     glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
     // Draw fringes
@@ -158,34 +145,29 @@ void Renderer::glnvg__fill(const GLNVGcall *call, const GLNVGpath *pPath, const 
 }
 
 void Renderer::glnvg__convexFill(const GLNVGcall *call,
-                                 const GLNVGpath *pPaths, const std::shared_ptr<TextureManager> &textureManager)
-{
+                                 const GLNVGpath *pPaths) {
   auto paths = &pPaths[call->pathOffset];
   int i, npaths = call->pathCount;
 
   glnvg__setUniforms(call->uniformOffset);
-  textureManager->bind(call->image);
+  _texture->bind(call->image);
   glnvg__checkError("convex fill");
 
-  for (i = 0; i < npaths; i++)
-  {
+  for (i = 0; i < npaths; i++) {
     glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
     // Draw fringes
-    if (paths[i].strokeCount > 0)
-    {
+    if (paths[i].strokeCount > 0) {
       glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset,
                    paths[i].strokeCount);
     }
   }
 }
 
-void Renderer::glnvg__stroke(const GLNVGcall *call, const GLNVGpath *pPaths, const std::shared_ptr<TextureManager> &textureManager)
-{
+void Renderer::glnvg__stroke(const GLNVGcall *call, const GLNVGpath *pPaths) {
   auto paths = &pPaths[call->pathOffset];
   int npaths = call->pathCount, i;
 
-  if (_flags & NVG_STENCIL_STROKES)
-  {
+  if (_flags & NVG_STENCIL_STROKES) {
     glEnable(GL_STENCIL_TEST);
     glnvg__stencilMask(0xff);
 
@@ -193,7 +175,7 @@ void Renderer::glnvg__stroke(const GLNVGcall *call, const GLNVGpath *pPaths, con
     glnvg__stencilFunc(GL_EQUAL, 0x0, 0xff);
     glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
     glnvg__setUniforms(call->uniformOffset + _fragSize);
-    textureManager->bind(call->image);
+    _texture->bind(call->image);
     glnvg__checkError("stroke fill 0");
     for (i = 0; i < npaths; i++)
       glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset,
@@ -201,7 +183,7 @@ void Renderer::glnvg__stroke(const GLNVGcall *call, const GLNVGpath *pPaths, con
 
     // Draw anti-aliased pixels.
     glnvg__setUniforms(call->uniformOffset);
-    textureManager->bind(call->image);
+    _texture->bind(call->image);
     glnvg__stencilFunc(GL_EQUAL, 0x00, 0xff);
     glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
     for (i = 0; i < npaths; i++)
@@ -224,11 +206,9 @@ void Renderer::glnvg__stroke(const GLNVGcall *call, const GLNVGpath *pPaths, con
     // call->uniformOffset
     //+ fragSize), paint, scissor, strokeWidth, fringe, 1.0f -
     // 0.5f/255.0f);
-  }
-  else
-  {
+  } else {
     glnvg__setUniforms(call->uniformOffset);
-    textureManager->bind(call->image);
+    _texture->bind(call->image);
     glnvg__checkError("stroke fill");
     // Draw Strokes
     for (i = 0; i < npaths; i++)
@@ -237,23 +217,20 @@ void Renderer::glnvg__stroke(const GLNVGcall *call, const GLNVGpath *pPaths, con
   }
 }
 
-void Renderer::glnvg__triangles(const GLNVGcall *call, const std::shared_ptr<TextureManager> &textureManager)
-{
+void Renderer::glnvg__triangles(const GLNVGcall *call) {
   glnvg__setUniforms(call->uniformOffset);
-  textureManager->bind(call->image);
+  _texture->bind(call->image);
   glnvg__checkError("triangles fill");
 
   glDrawArrays(GL_TRIANGLES, call->triangleOffset, call->triangleCount);
 }
 
-void Renderer::glnvg__setUniforms(int uniformOffset)
-{
+void Renderer::glnvg__setUniforms(int uniformOffset) {
   glBindBufferRange(GL_UNIFORM_BUFFER, GLNVG_FRAG_BINDING, _fragBuf,
                     uniformOffset, sizeof(GLNVGfragUniforms));
 }
 
-void Renderer::render(const NVGdrawData *data)
-{
+void Renderer::render(const NVGdrawData *data) {
   // Setup require GL state.
   _shader->use();
 
@@ -269,7 +246,7 @@ void Renderer::render(const NVGdrawData *data)
   glStencilFunc(GL_ALWAYS, 0, 0xffffffff);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, 0);
-  data->textureManager->bind(0);
+  _texture->bind(0);
   _stencilMask = 0xffffffff;
   _stencilFunc = GL_ALWAYS;
   _stencilFuncRef = 0;
@@ -288,8 +265,8 @@ void Renderer::render(const NVGdrawData *data)
   // Upload vertex data
   glBindVertexArray(_vertArr);
   glBindBuffer(GL_ARRAY_BUFFER, _vertBuf);
-  glBufferData(GL_ARRAY_BUFFER, data->vertexCount * sizeof(NVGvertex), data->pVertex,
-               GL_STREAM_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, data->vertexCount * sizeof(NVGvertex),
+               data->pVertex, GL_STREAM_DRAW);
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(NVGvertex),
@@ -302,18 +279,17 @@ void Renderer::render(const NVGdrawData *data)
 
   glBindBuffer(GL_UNIFORM_BUFFER, _fragBuf);
 
-  for (int i = 0; i < data->drawCount; ++i)
-  {
+  for (int i = 0; i < data->drawCount; ++i) {
     auto &call = data->drawData[i];
     glnvg__blendFuncSeparate(&call.blendFunc);
     if (call.type == GLNVG_FILL)
-      glnvg__fill(&call, data->pPath, data->textureManager);
+      glnvg__fill(&call, data->pPath);
     else if (call.type == GLNVG_CONVEXFILL)
-      glnvg__convexFill(&call, data->pPath, data->textureManager);
+      glnvg__convexFill(&call, data->pPath);
     else if (call.type == GLNVG_STROKE)
-      glnvg__stroke(&call, data->pPath, data->textureManager);
+      glnvg__stroke(&call, data->pPath);
     else if (call.type == GLNVG_TRIANGLES)
-      glnvg__triangles(&call, data->textureManager);
+      glnvg__triangles(&call);
   }
 
   glDisableVertexAttribArray(0);
@@ -325,10 +301,22 @@ void Renderer::render(const NVGdrawData *data)
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-#include "nanovg_gl_context.h"
-void RenderDrawData(struct NVGcontext *ctx, NVGdrawData *data)
-{
-  auto gl = (GLNVGcontext *)nvgParams(ctx)->userPtr;
-  // gl->render();
-  gl->clear();
+int Renderer::nvglCreateImageFromHandleGL3(unsigned int textureId, int w, int h,
+                                           int imageFlags) {
+  auto tex = GLNVGtexture::fromHandle(textureId, w, h, imageFlags);
+  if (!tex)
+    return 0;
+  _texture->registerTexture(tex);
+  return tex->id();
 }
+
+unsigned int Renderer::nvglImageHandleGL3(int image) {
+  auto tex = _texture->findTexture(image);
+  return tex->handle();
+}
+
+// void RenderDrawData(struct NVGcontext *ctx, NVGdrawData *data) {
+//   nvgParams(ctx)->clear();
+//   // gl->render();
+//   // gl->clear();
+// }

@@ -8,12 +8,6 @@ enum GLNVGuniformLoc {
   GLNVG_MAX_LOCS
 };
 
-enum GLNVGshaderType {
-  NSVG_SHADER_FILLGRAD,
-  NSVG_SHADER_FILLIMG,
-  NSVG_SHADER_SIMPLE,
-  NSVG_SHADER_IMG
-};
 
 enum GLNVGuniformBindings {
   GLNVG_FRAG_BINDING = 0,

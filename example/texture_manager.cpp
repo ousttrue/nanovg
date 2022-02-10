@@ -1,4 +1,4 @@
-#include "nanovg_gl_texture.h"
+#include "texture_manager.h"
 #include "nanovg.h"
 #include "nanovg_gl.h"
 #include <assert.h>

@@ -24,12 +24,6 @@ extern "C" {
 // Flags should be combination of the create flags above.
 void nvgInitGL3(struct NVGcontext *ctx, int flags);
 
-int nvglCreateImageFromHandleGL3(NVGcontext *ctx, unsigned int textureId, int w,
-                                 int h, int flags);
-unsigned int nvglImageHandleGL3(NVGcontext *ctx, int image);
-
-struct NVGdrawData *nvgGetDrawData(struct NVGcontext *ctx);
-
 #ifdef __cplusplus
 }
 #endif

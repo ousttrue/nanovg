@@ -18,6 +18,7 @@
 
 #ifndef NANOVG_H
 #define NANOVG_H
+#include <vector>
 
 #ifdef __cplusplus
 extern "C" {
@@ -673,21 +674,165 @@ struct NVGpath {
 };
 typedef struct NVGpath NVGpath;
 
+struct GLNVGfragUniforms
+{
+  float scissorMat[12]; // matrices are actually 3 vec4s
+  float paintMat[12];
+  struct NVGcolor innerCol;
+  struct NVGcolor outerCol;
+  float scissorExt[2];
+  float scissorScale[2];
+  float extent[2];
+  float radius;
+  float feather;
+  float strokeMult;
+  float strokeThr;
+  int texType;
+  int type;
+};
+
+enum GLNVGcallType
+{
+  GLNVG_NONE = 0,
+  GLNVG_FILL,
+  GLNVG_CONVEXFILL,
+  GLNVG_STROKE,
+  GLNVG_TRIANGLES,
+};
+
+struct GLNVGblend
+{
+  unsigned int srcRGB;
+  unsigned int dstRGB;
+  unsigned int srcAlpha;
+  unsigned int dstAlpha;
+};
+
+struct GLNVGcall
+{
+  int type;
+  int image;
+  int pathOffset;
+  int pathCount;
+  int triangleOffset;
+  int triangleCount;
+  int uniformOffset;
+  struct GLNVGblend blendFunc;
+};
+
+struct GLNVGpath
+{
+  int fillOffset;
+  int fillCount;
+  int strokeOffset;
+  int strokeCount;
+};
+
+struct NVGdrawData
+{
+  float view[2];
+  GLNVGcall *drawData;
+  size_t drawCount;
+  void *pUniform;
+  int uniformByteSize;
+  NVGvertex *pVertex;
+  int vertexCount;
+  GLNVGpath *pPath;
+};
+
+enum GLNVGshaderType {
+  NSVG_SHADER_FILLGRAD,
+  NSVG_SHADER_FILLIMG,
+  NSVG_SHADER_SIMPLE,
+  NSVG_SHADER_IMG
+};
+
+struct NVGtextureInfo
+{
+  int _id = {};
+  unsigned int _handle = {};
+  int _width = {};
+  int _height = {};
+  int _type = {};
+  int _flags = {};
+};
+
 struct NVGparams {
-	void* userPtr;
-	int edgeAntiAlias;
-	int (*renderCreate)(void* uptr);
-	int (*renderCreateTexture)(void* uptr, int type, int w, int h, int imageFlags, const unsigned char* data);
-	int (*renderDeleteTexture)(void* uptr, int image);
-	int (*renderUpdateTexture)(void* uptr, int image, int x, int y, int w, int h, const unsigned char* data);
-	int (*renderGetTextureSize)(void* uptr, int image, int* w, int* h);
-	void (*renderViewport)(void* uptr, float width, float height, float devicePixelRatio);
-	void (*renderCancel)(void* uptr);
-	void (*renderFlush)(void* uptr);
-	void (*renderFill)(void* uptr, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, float fringe, const float* bounds, const NVGpath* paths, int npaths);
-	void (*renderStroke)(void* uptr, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, float fringe, float strokeWidth, const NVGpath* paths, int npaths);
-	void (*renderTriangles)(void* uptr, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, const NVGvertex* verts, int nverts, float fringe);
-	void (*renderDelete)(void* uptr);
+	void* userPtr={};
+	int edgeAntiAlias={};
+	int (*renderCreate)(struct NVGparams *params)={};
+	int (*renderCreateTexture)(struct NVGparams *params, int type, int w, int h, int imageFlags, const unsigned char* data)={};
+	int (*renderDeleteTexture)(struct NVGparams *params, int image)={};
+	int (*renderUpdateTexture)(struct NVGparams *params, int image, int x, int y, int w, int h, const unsigned char* data)={};
+	struct NVGtextureInfo *(*renderGetTexture)(struct NVGparams *params, int image)={};
+	void (*renderViewport)(struct NVGparams *params, float width, float height, float devicePixelRatio)={};
+	void (*renderCancel)(struct NVGparams *params)={};
+	void (*renderFlush)(struct NVGparams *params)={};
+	void (*renderFill)(struct NVGparams *params, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, float fringe, const float* bounds, const NVGpath* paths, int npaths)={};
+	void (*renderStroke)(struct NVGparams *params, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, float fringe, float strokeWidth, const NVGpath* paths, int npaths)={};
+	void (*renderTriangles)(struct NVGparams *params, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, const NVGvertex* verts, int nverts, float fringe)={};
+	void (*renderDelete)(struct NVGparams *params)={};
+
+  NVGdrawData _drawdata={};
+  int _flags = {};
+
+  // Per frame buffers
+  std::vector<GLNVGcall> _calls;
+  std::vector<GLNVGpath> _paths;
+  NVGvertex *_verts = {};
+  int _nverts = {};
+  int _cverts = {};
+  unsigned char *_uniforms = {};
+  int _cuniforms = {};
+  int _nuniforms = {};
+
+  void clear();
+  void setViewSize(int width, int height)
+  {
+    _drawdata.view[0] = width;
+    _drawdata.view[1] = height;
+  }
+  bool initialize();
+  void callFill(NVGpaint *paint, NVGcompositeOperationState compositeOperation,
+                NVGscissor *scissor, float fringe, const float *bounds,
+                const NVGpath *paths, int npaths);
+  void callStroke(NVGpaint *paint,
+                  NVGcompositeOperationState compositeOperation,
+                  NVGscissor *scissor, float fringe, float strokeWidth,
+                  const NVGpath *paths, int npaths);
+  void callTriangles(NVGpaint *paint,
+                     NVGcompositeOperationState compositeOperation,
+                     NVGscissor *scissor, const NVGvertex *verts, int nverts,
+                     float fringe);
+
+  NVGdrawData *drawdata()
+  {
+    _drawdata.drawData = _calls.data();
+    _drawdata.drawCount = _calls.size();
+    _drawdata.pUniform = _uniforms;
+    _drawdata.uniformByteSize = _nuniforms * 256; // _renderer->fragSize();
+    _drawdata.pVertex = _verts;
+    _drawdata.vertexCount = _nverts;
+    _drawdata.pPath = _paths.data();
+    return &_drawdata;
+  }
+
+private:
+  int flags() const { return _flags; }
+  GLNVGcall *glnvg__allocCall();
+  int glnvg__allocPaths(int n);
+  int glnvg__allocVerts(int n);
+  int glnvg__allocFragUniforms(int n);
+  GLNVGpath &get_path(size_t index) { return _paths[index]; }
+  NVGvertex &get_vertex(size_t index) { return _verts[index]; }
+  struct GLNVGfragUniforms *nvg__fragUniformPtr(int i)
+  {
+    return (GLNVGfragUniforms *)&_uniforms[i];
+  }
+  int glnvg__convertPaint(GLNVGfragUniforms *frag, NVGpaint *paint,
+                          NVGscissor *scissor, float width, float fringe,
+                          float strokeThr);
+
 };
 typedef struct NVGparams NVGparams;
 
@@ -699,6 +844,8 @@ NVGparams* nvgParams(NVGcontext* ctx);
 
 // Debug function to dump cached path data.
 void nvgDebugDumpPathCache(NVGcontext* ctx);
+
+NVGdrawData *nvgGetDrawData(struct NVGcontext *ctx);
 
 #ifdef _MSC_VER
 #pragma warning(pop)
