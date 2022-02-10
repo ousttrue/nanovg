@@ -366,9 +366,3 @@ unsigned int Renderer::nvglImageHandleGL3(int image) {
   auto tex = _texture->findTexture(image);
   return tex->handle();
 }
-
-// void RenderDrawData(struct NVGcontext *ctx, NVGdrawData *data) {
-//   nvgParams(ctx)->clear();
-//   // gl->render();
-//   // gl->clear();
-// }

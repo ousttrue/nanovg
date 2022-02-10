@@ -2,47 +2,9 @@
 #include "demo.h"
 #include "nanovg.h"
 #include "perf.h"
-#include "renderer.h"
-#include "texture_manager.h"
 #include <glad/glad.h>
+#include <nanovg_impl_opengl3.h>
 #include <memory>
-
-std::shared_ptr<Renderer> g_renderer;
-
-static int glnvg__renderCreateTexture(struct NVGparams *params, int type, int w, int h,
-                                      int imageFlags,
-                                      const unsigned char *data) {
-  // auto gl = (GLNVGcontext *)uptr;
-  auto tex = GLNVGtexture::load(w, h, type, data, imageFlags);
-  if (!tex) {
-    return 0;
-  }
-  g_renderer->textureManager()->registerTexture(tex);
-  return tex->id();
-}
-
-static int glnvg__renderDeleteTexture(struct NVGparams *params, int image) {
-  // GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  return g_renderer->textureManager()->deleteTexture(image);
-}
-
-static int glnvg__renderUpdateTexture(struct NVGparams *params, int image, int x, int y,
-                                      int w, int h, const unsigned char *data) {
-  // auto gl = (GLNVGcontext *)uptr;
-  auto tex = g_renderer->textureManager()->findTexture(image);
-  if (!tex)
-    return 0;
-  tex->update(x, y, w, h, data);
-  return 1;
-}
-
-static NVGtextureInfo *glnvg__renderGetTexture(struct NVGparams *params, int image) {
-  // GLNVGcontext *gl = (GLNVGcontext *)uptr;
-  auto tex = g_renderer->textureManager()->findTexture(image);
-  if (!tex)
-    return 0;
-  return (NVGtextureInfo*)tex.get();
-}
 
 int main()
 {
@@ -63,15 +25,9 @@ int main()
     return 2;
   }
 
-  auto params = nvgParams(vg);
-  params->renderCreateTexture = glnvg__renderCreateTexture;
-  params->renderDeleteTexture = glnvg__renderDeleteTexture;
-  params->renderUpdateTexture = glnvg__renderUpdateTexture;
-  params->renderGetTexture = glnvg__renderGetTexture;
+  nvg_ImplOpenGL3_Init(vg);
 
   {
-    g_renderer = Renderer::create(flags & NVG_ANTIALIAS);
-
     DemoData data(vg);
     if (!data.load())
     {
@@ -119,7 +75,7 @@ int main()
         gpuGraph.renderGraph(vg, 5 + 200 + 5 + 200 + 5, 5);
       }
 
-      g_renderer->render(nvgGetDrawData(vg));
+      nvg_ImplOpenGL3_RenderDrawData(nvgGetDrawData(vg));
 
       // Measure the CPU time taken excluding swap buffers (as the swap may wait
       // for GPU)
@@ -142,7 +98,7 @@ int main()
       app.endFrame();
     }
   }
-
+  nvg_ImplOpenGL3_Shutdown();
   nvgDelete(vg);
 
   return 0;

@@ -49,18 +49,19 @@ target_include_directories(${TARGET_NAME} PUBLIC ${GLFW_DIR}/include)
 
 set(TARGET_NAME nanovg)
 add_library(${TARGET_NAME} src/nanovg.cpp)
+target_include_directories(${TARGET_NAME} PUBLIC src)
 
 set(TARGET_NAME example_gl3)
 add_executable(
   ${TARGET_NAME}
-  example/nanovg_gl_shader.cpp
-  example/texture_manager.cpp
-  example/renderer.cpp
   example/example_gl3.cpp
+  backends/nanovg_gl_shader.cpp
+  backends/texture_manager.cpp
+  backends/renderer.cpp
+  backends/nanovg_impl_opengl3.cpp
   example/GlfwApp.cpp
   example/demo.cpp
-  example/perf.cpp
-  )
+  example/perf.cpp)
 # target_compile_definitions(${TARGET_NAME} PRIVATE NANOVG_GL3_IMPLEMENTATION=1)
-target_include_directories(${TARGET_NAME} PRIVATE src)
 target_link_libraries(${TARGET_NAME} PRIVATE nanovg glfw glad OPENGL32.lib)
+target_include_directories(${TARGET_NAME} PRIVATE backends)
