@@ -34,6 +34,6 @@ private:
   void glnvg__convexFill(const GLNVGcall *call, const GLNVGpath *paths);
   void glnvg__stroke(const GLNVGcall *call, const GLNVGpath *paths);
   void glnvg__triangles(const GLNVGcall *call);
-  void glnvg__blendFuncSeparate(const GLNVGblend *blend);
+  void glnvg__blendFuncSeparate(const struct GLNVGblend *blend);
   void glnvg__setUniforms(int uniformOffset);
 };

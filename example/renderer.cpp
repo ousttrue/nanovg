@@ -6,6 +6,56 @@
 #include <glad/glad.h>
 #include <memory>
 
+static unsigned int glnvg_convertBlendFuncFactor(NVGblendFactor factor) {
+  if (factor == NVG_ZERO)
+    return GL_ZERO;
+  if (factor == NVG_ONE)
+    return GL_ONE;
+  if (factor == NVG_SRC_COLOR)
+    return GL_SRC_COLOR;
+  if (factor == NVG_ONE_MINUS_SRC_COLOR)
+    return GL_ONE_MINUS_SRC_COLOR;
+  if (factor == NVG_DST_COLOR)
+    return GL_DST_COLOR;
+  if (factor == NVG_ONE_MINUS_DST_COLOR)
+    return GL_ONE_MINUS_DST_COLOR;
+  if (factor == NVG_SRC_ALPHA)
+    return GL_SRC_ALPHA;
+  if (factor == NVG_ONE_MINUS_SRC_ALPHA)
+    return GL_ONE_MINUS_SRC_ALPHA;
+  if (factor == NVG_DST_ALPHA)
+    return GL_DST_ALPHA;
+  if (factor == NVG_ONE_MINUS_DST_ALPHA)
+    return GL_ONE_MINUS_DST_ALPHA;
+  if (factor == NVG_SRC_ALPHA_SATURATE)
+    return GL_SRC_ALPHA_SATURATE;
+  return GL_INVALID_ENUM;
+}
+
+struct GLNVGblend
+{
+  unsigned int srcRGB;
+  unsigned int dstRGB;
+  unsigned int srcAlpha;
+  unsigned int dstAlpha;
+};
+
+GLNVGblend glnvg__blendCompositeOperation(NVGcompositeOperationState op) {
+  GLNVGblend blend;
+  blend.srcRGB = glnvg_convertBlendFuncFactor(op.srcRGB);
+  blend.dstRGB = glnvg_convertBlendFuncFactor(op.dstRGB);
+  blend.srcAlpha = glnvg_convertBlendFuncFactor(op.srcAlpha);
+  blend.dstAlpha = glnvg_convertBlendFuncFactor(op.dstAlpha);
+  if (blend.srcRGB == GL_INVALID_ENUM || blend.dstRGB == GL_INVALID_ENUM ||
+      blend.srcAlpha == GL_INVALID_ENUM || blend.dstAlpha == GL_INVALID_ENUM) {
+    blend.srcRGB = GL_ONE;
+    blend.dstRGB = GL_ONE_MINUS_SRC_ALPHA;
+    blend.srcAlpha = GL_ONE;
+    blend.dstAlpha = GL_ONE_MINUS_SRC_ALPHA;
+  }
+  return blend;
+}
+
 // cached state
 unsigned int _stencilMask = {};
 unsigned int _stencilFunc = {};
@@ -251,10 +301,10 @@ void Renderer::render(const NVGdrawData *data) {
   _stencilFunc = GL_ALWAYS;
   _stencilFuncRef = 0;
   _stencilFuncMask = 0xffffffff;
-  _blendFunc.srcRGB = GL_INVALID_ENUM;
-  _blendFunc.srcAlpha = GL_INVALID_ENUM;
-  _blendFunc.dstRGB = GL_INVALID_ENUM;
-  _blendFunc.dstAlpha = GL_INVALID_ENUM;
+  _blendFunc.srcRGB = {};
+  _blendFunc.srcAlpha = {};
+  _blendFunc.dstRGB = {};
+  _blendFunc.dstAlpha = {};
 
   // Upload ubo for frag shaders
   glBindBuffer(GL_UNIFORM_BUFFER, _fragBuf);
@@ -281,7 +331,10 @@ void Renderer::render(const NVGdrawData *data) {
 
   for (int i = 0; i < data->drawCount; ++i) {
     auto &call = data->drawData[i];
-    glnvg__blendFuncSeparate(&call.blendFunc);
+
+    GLNVGblend blendFunc = glnvg__blendCompositeOperation(call.blendFunc);   
+
+    glnvg__blendFuncSeparate(&blendFunc);
     if (call.type == GLNVG_FILL)
       glnvg__fill(&call, data->pPath);
     else if (call.type == GLNVG_CONVEXFILL)

@@ -101,6 +101,7 @@ enum NVGalign {
 };
 
 enum NVGblendFactor {
+	NVG_INVALID = 0,
 	NVG_ZERO = 1<<0,
 	NVG_ONE = 1<<1,
 	NVG_SRC_COLOR = 1<<2,
@@ -129,10 +130,10 @@ enum NVGcompositeOperation {
 };
 
 struct NVGcompositeOperationState {
-	int srcRGB;
-	int dstRGB;
-	int srcAlpha;
-	int dstAlpha;
+	NVGblendFactor srcRGB;
+	NVGblendFactor dstRGB;
+	NVGblendFactor srcAlpha;
+	NVGblendFactor dstAlpha;
 };
 typedef struct NVGcompositeOperationState NVGcompositeOperationState;
 
@@ -700,14 +701,6 @@ enum GLNVGcallType
   GLNVG_TRIANGLES,
 };
 
-struct GLNVGblend
-{
-  unsigned int srcRGB;
-  unsigned int dstRGB;
-  unsigned int srcAlpha;
-  unsigned int dstAlpha;
-};
-
 struct GLNVGcall
 {
   int type;
@@ -717,7 +710,7 @@ struct GLNVGcall
   int triangleOffset;
   int triangleCount;
   int uniformOffset;
-  struct GLNVGblend blendFunc;
+  struct NVGcompositeOperationState blendFunc;
 };
 
 struct GLNVGpath

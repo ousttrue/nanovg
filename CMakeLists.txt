@@ -47,10 +47,12 @@ target_compile_definitions(
 target_compile_options(${TARGET_NAME} PRIVATE /wd4005)
 target_include_directories(${TARGET_NAME} PUBLIC ${GLFW_DIR}/include)
 
+set(TARGET_NAME nanovg)
+add_library(${TARGET_NAME} src/nanovg.cpp)
+
 set(TARGET_NAME example_gl3)
 add_executable(
   ${TARGET_NAME}
-  src/nanovg.cpp  
   example/nanovg_gl.cpp
   example/nanovg_gl_shader.cpp
   example/texture_manager.cpp
@@ -62,4 +64,4 @@ add_executable(
   )
 # target_compile_definitions(${TARGET_NAME} PRIVATE NANOVG_GL3_IMPLEMENTATION=1)
 target_include_directories(${TARGET_NAME} PRIVATE src)
-target_link_libraries(${TARGET_NAME} PRIVATE glfw glad OPENGL32.lib)
+target_link_libraries(${TARGET_NAME} PRIVATE nanovg glfw glad OPENGL32.lib)

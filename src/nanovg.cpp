@@ -16,7 +16,6 @@
 // 3. This notice may not be removed or altered from any source distribution.
 //
 
-#include <glad/glad.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -211,9 +210,9 @@ static void nvg__setDevicePixelRatio(NVGcontext* ctx, float ratio)
 	ctx->devicePxRatio = ratio;
 }
 
-static NVGcompositeOperationState nvg__compositeOperationState(int op)
+static NVGcompositeOperationState nvg__compositeOperationState(NVGcompositeOperation op)
 {
-	int sfactor, dfactor;
+	NVGblendFactor sfactor, dfactor;
 
 	if (op == NVG_SOURCE_OVER)
 	{
@@ -1044,7 +1043,7 @@ void nvgResetScissor(NVGcontext* ctx)
 }
 
 // Global composite operation.
-void nvgGlobalCompositeOperation(NVGcontext* ctx, int op)
+void nvgGlobalCompositeOperation(NVGcontext* ctx, NVGcompositeOperation op)
 {
 	NVGstate* state = nvg__getState(ctx);
 	state->compositeOperation = nvg__compositeOperationState(op);
@@ -1058,10 +1057,10 @@ void nvgGlobalCompositeBlendFunc(NVGcontext* ctx, int sfactor, int dfactor)
 void nvgGlobalCompositeBlendFuncSeparate(NVGcontext* ctx, int srcRGB, int dstRGB, int srcAlpha, int dstAlpha)
 {
 	NVGcompositeOperationState op;
-	op.srcRGB = srcRGB;
-	op.dstRGB = dstRGB;
-	op.srcAlpha = srcAlpha;
-	op.dstAlpha = dstAlpha;
+	op.srcRGB = static_cast<NVGblendFactor>(srcRGB);
+	op.dstRGB = static_cast<NVGblendFactor>(dstRGB);
+	op.srcAlpha = static_cast<NVGblendFactor>(srcAlpha);
+	op.dstAlpha = static_cast<NVGblendFactor>(dstAlpha);
 
 	NVGstate* state = nvg__getState(ctx);
 	state->compositeOperation = op;
@@ -3070,47 +3069,6 @@ int NVGparams::glnvg__allocFragUniforms(int n) {
 //   clear();
 // }
 
-unsigned int glnvg_convertBlendFuncFactor(int factor) {
-  if (factor == NVG_ZERO)
-    return GL_ZERO;
-  if (factor == NVG_ONE)
-    return GL_ONE;
-  if (factor == NVG_SRC_COLOR)
-    return GL_SRC_COLOR;
-  if (factor == NVG_ONE_MINUS_SRC_COLOR)
-    return GL_ONE_MINUS_SRC_COLOR;
-  if (factor == NVG_DST_COLOR)
-    return GL_DST_COLOR;
-  if (factor == NVG_ONE_MINUS_DST_COLOR)
-    return GL_ONE_MINUS_DST_COLOR;
-  if (factor == NVG_SRC_ALPHA)
-    return GL_SRC_ALPHA;
-  if (factor == NVG_ONE_MINUS_SRC_ALPHA)
-    return GL_ONE_MINUS_SRC_ALPHA;
-  if (factor == NVG_DST_ALPHA)
-    return GL_DST_ALPHA;
-  if (factor == NVG_ONE_MINUS_DST_ALPHA)
-    return GL_ONE_MINUS_DST_ALPHA;
-  if (factor == NVG_SRC_ALPHA_SATURATE)
-    return GL_SRC_ALPHA_SATURATE;
-  return GL_INVALID_ENUM;
-}
-
-GLNVGblend glnvg__blendCompositeOperation(NVGcompositeOperationState op) {
-  GLNVGblend blend;
-  blend.srcRGB = glnvg_convertBlendFuncFactor(op.srcRGB);
-  blend.dstRGB = glnvg_convertBlendFuncFactor(op.dstRGB);
-  blend.srcAlpha = glnvg_convertBlendFuncFactor(op.srcAlpha);
-  blend.dstAlpha = glnvg_convertBlendFuncFactor(op.dstAlpha);
-  if (blend.srcRGB == GL_INVALID_ENUM || blend.dstRGB == GL_INVALID_ENUM ||
-      blend.srcAlpha == GL_INVALID_ENUM || blend.dstAlpha == GL_INVALID_ENUM) {
-    blend.srcRGB = GL_ONE;
-    blend.dstRGB = GL_ONE_MINUS_SRC_ALPHA;
-    blend.srcAlpha = GL_ONE;
-    blend.dstAlpha = GL_ONE_MINUS_SRC_ALPHA;
-  }
-  return blend;
-}
 
 void NVGparams::callFill(NVGpaint *paint,
                             NVGcompositeOperationState compositeOperation,
@@ -3127,7 +3085,7 @@ void NVGparams::callFill(NVGpaint *paint,
     return;
   call->pathCount = npaths;
   call->image = paint->image;
-  call->blendFunc = glnvg__blendCompositeOperation(compositeOperation);
+  call->blendFunc = compositeOperation;
 
   if (npaths == 1 && paths[0].convex) {
     call->type = GLNVG_CONVEXFILL;
@@ -3206,7 +3164,7 @@ void NVGparams::callStroke(NVGpaint *paint,
     return;
   call->pathCount = npaths;
   call->image = paint->image;
-  call->blendFunc = glnvg__blendCompositeOperation(compositeOperation);
+  call->blendFunc = compositeOperation;
 
   // Allocate vertices for all the paths.
   maxverts = glnvg__maxVertCount(paths, npaths);
@@ -3260,7 +3218,7 @@ void NVGparams::callTriangles(NVGpaint *paint,
 
   call->type = GLNVG_TRIANGLES;
   call->image = paint->image;
-  call->blendFunc = glnvg__blendCompositeOperation(compositeOperation);
+  call->blendFunc = compositeOperation;
 
   // Allocate vertices for all the paths.
   call->triangleOffset = glnvg__allocVerts(nverts);
