@@ -51,8 +51,8 @@ set(TARGET_NAME example_gl3)
 add_executable(
   ${TARGET_NAME}
   src/nanovg.cpp  
-  src/nanovg_gl.cpp
-  src/nanovg_gl_shader.cpp
+  example/nanovg_gl.cpp
+  example/nanovg_gl_shader.cpp
   example/texture_manager.cpp
   example/renderer.cpp
   example/example_gl3.cpp
