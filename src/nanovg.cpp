@@ -320,11 +320,14 @@ static void _initialize(NVGcontext* ctx)
 	ctx->fontImageIdx = 0;
 }
 
-NVGcontext* nvgCreate()
+NVGcontext* nvgCreate(int flags)
 {
 	auto ctx = new NVGcontext;
 	if (ctx == NULL) goto error;
 	// memset(ctx, 0, sizeof(NVGcontext));
+
+	ctx->params._flags = flags;
+	ctx->params.edgeAntiAlias = flags & NVG_ANTIALIAS ? 1 : 0;
 
 	for (int i = 0; i < NVG_MAX_FONTIMAGES; i++)
 		ctx->fontImages[i] = 0;
@@ -356,23 +359,19 @@ NVGparams* nvgParams(NVGcontext* ctx)
 
 void nvgDelete(NVGcontext* ctx)
 {
-	int i;
-	if (ctx == NULL) return;
+	if (!ctx) return;
 	if (ctx->commands != NULL) free(ctx->commands);
 	if (ctx->cache != NULL) nvg__deletePathCache(ctx->cache);
 
 	if (ctx->fs)
 		fonsDeleteInternal(ctx->fs);
 
-	for (i = 0; i < NVG_MAX_FONTIMAGES; i++) {
+	for (int i = 0; i < NVG_MAX_FONTIMAGES; i++) {
 		if (ctx->fontImages[i] != 0) {
 			nvgDeleteImage(ctx, ctx->fontImages[i]);
 			ctx->fontImages[i] = 0;
 		}
 	}
-
-	if (ctx->params.renderDelete != NULL)
-		ctx->params.renderDelete(&ctx->params);
 
 	free(ctx);
 }
@@ -392,7 +391,7 @@ void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float
 
 	nvg__setDevicePixelRatio(ctx, devicePixelRatio);
 
-	ctx->params.renderViewport(&ctx->params, windowWidth, windowHeight, devicePixelRatio);
+	ctx->params.setViewSize(windowWidth, windowHeight);
 
 	ctx->drawCallCount = 0;
 	ctx->fillTriCount = 0;
@@ -402,38 +401,38 @@ void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float
 
 void nvgCancelFrame(NVGcontext* ctx)
 {
-	ctx->params.renderCancel(&ctx->params);
+	ctx->params.clear();
 }
 
-void nvgEndFrame(NVGcontext* ctx)
-{
-	ctx->params.renderFlush(&ctx->params);
-	if (ctx->fontImageIdx != 0) {
-		int fontImage = ctx->fontImages[ctx->fontImageIdx];
-		int i, j, iw, ih;
-		// delete images that smaller than current one
-		if (fontImage == 0)
-			return;
-		nvgImageSize(ctx, fontImage, &iw, &ih);
-		for (i = j = 0; i < ctx->fontImageIdx; i++) {
-			if (ctx->fontImages[i] != 0) {
-				int nw, nh;
-				nvgImageSize(ctx, ctx->fontImages[i], &nw, &nh);
-				if (nw < iw || nh < ih)
-					nvgDeleteImage(ctx, ctx->fontImages[i]);
-				else
-					ctx->fontImages[j++] = ctx->fontImages[i];
-			}
-		}
-		// make current font image to first
-		ctx->fontImages[j++] = ctx->fontImages[0];
-		ctx->fontImages[0] = fontImage;
-		ctx->fontImageIdx = 0;
-		// clear all images after j
-		for (i = j; i < NVG_MAX_FONTIMAGES; i++)
-			ctx->fontImages[i] = 0;
-	}
-}
+// void nvgEndFrame(NVGcontext* ctx)
+// {
+// 	ctx->params.renderFlush(&ctx->params);
+// 	if (ctx->fontImageIdx != 0) {
+// 		int fontImage = ctx->fontImages[ctx->fontImageIdx];
+// 		int i, j, iw, ih;
+// 		// delete images that smaller than current one
+// 		if (fontImage == 0)
+// 			return;
+// 		nvgImageSize(ctx, fontImage, &iw, &ih);
+// 		for (i = j = 0; i < ctx->fontImageIdx; i++) {
+// 			if (ctx->fontImages[i] != 0) {
+// 				int nw, nh;
+// 				nvgImageSize(ctx, ctx->fontImages[i], &nw, &nh);
+// 				if (nw < iw || nh < ih)
+// 					nvgDeleteImage(ctx, ctx->fontImages[i]);
+// 				else
+// 					ctx->fontImages[j++] = ctx->fontImages[i];
+// 			}
+// 		}
+// 		// make current font image to first
+// 		ctx->fontImages[j++] = ctx->fontImages[0];
+// 		ctx->fontImages[0] = fontImage;
+// 		ctx->fontImageIdx = 0;
+// 		// clear all images after j
+// 		for (i = j; i < NVG_MAX_FONTIMAGES; i++)
+// 			ctx->fontImages[i] = 0;
+// 	}
+// }
 
 NVGcolor nvgRGB(unsigned char r, unsigned char g, unsigned char b)
 {
@@ -2254,7 +2253,7 @@ void nvgFill(NVGcontext* ctx)
 	fillPaint.innerColor.a *= state->alpha;
 	fillPaint.outerColor.a *= state->alpha;
 
-	ctx->params.renderFill(&ctx->params, &fillPaint, state->compositeOperation, &state->scissor, ctx->fringeWidth,
+	ctx->params.callFill(&fillPaint, state->compositeOperation, &state->scissor, ctx->fringeWidth,
 						   ctx->cache->bounds, ctx->cache->paths, ctx->cache->npaths);
 
 	// Count triangles
@@ -2296,7 +2295,7 @@ void nvgStroke(NVGcontext* ctx)
 	else
 		nvg__expandStroke(ctx, strokeWidth*0.5f, 0.0f, state->lineCap, state->lineJoin, state->miterLimit);
 
-	ctx->params.renderStroke(&ctx->params, &strokePaint, state->compositeOperation, &state->scissor, ctx->fringeWidth,
+	ctx->params.callStroke(&strokePaint, state->compositeOperation, &state->scissor, ctx->fringeWidth,
 							 strokeWidth, ctx->cache->paths, ctx->cache->npaths);
 
 	// Count triangles
@@ -2464,7 +2463,7 @@ static void nvg__renderText(NVGcontext* ctx, NVGvertex* verts, int nverts)
 	paint.innerColor.a *= state->alpha;
 	paint.outerColor.a *= state->alpha;
 
-	ctx->params.renderTriangles(&ctx->params, &paint, state->compositeOperation, &state->scissor, verts, nverts, ctx->fringeWidth);
+	ctx->params.callTriangles(&paint, state->compositeOperation, &state->scissor, verts, nverts, ctx->fringeWidth);
 
 	ctx->drawCallCount++;
 	ctx->textTriCount += nverts/3;

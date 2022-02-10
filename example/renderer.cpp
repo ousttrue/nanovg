@@ -1,5 +1,4 @@
 #include "renderer.h"
-#include "nanovg_gl.h"
 #include "nanovg_gl_shader.h"
 #include "texture_manager.h"
 #include <assert.h>

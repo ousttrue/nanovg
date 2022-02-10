@@ -53,7 +53,6 @@ add_library(${TARGET_NAME} src/nanovg.cpp)
 set(TARGET_NAME example_gl3)
 add_executable(
   ${TARGET_NAME}
-  example/nanovg_gl.cpp
   example/nanovg_gl_shader.cpp
   example/texture_manager.cpp
   example/renderer.cpp

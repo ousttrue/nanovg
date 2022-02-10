@@ -176,7 +176,8 @@ void nvgBeginFrame(NVGcontext* ctx, float windowWidth, float windowHeight, float
 void nvgCancelFrame(NVGcontext* ctx);
 
 // Ends drawing flushing remaining render state.
-void nvgEndFrame(NVGcontext* ctx);
+// Call nvgGetDrawData instead of nvgEndFrame to draw yourself
+// void nvgEndFrame(NVGcontext* ctx);
 
 //
 // Composite operation
@@ -753,18 +754,10 @@ struct NVGtextureInfo
 struct NVGparams {
 	void* userPtr={};
 	int edgeAntiAlias={};
-	int (*renderCreate)(struct NVGparams *params)={};
 	int (*renderCreateTexture)(struct NVGparams *params, int type, int w, int h, int imageFlags, const unsigned char* data)={};
 	int (*renderDeleteTexture)(struct NVGparams *params, int image)={};
 	int (*renderUpdateTexture)(struct NVGparams *params, int image, int x, int y, int w, int h, const unsigned char* data)={};
 	struct NVGtextureInfo *(*renderGetTexture)(struct NVGparams *params, int image)={};
-	void (*renderViewport)(struct NVGparams *params, float width, float height, float devicePixelRatio)={};
-	void (*renderCancel)(struct NVGparams *params)={};
-	void (*renderFlush)(struct NVGparams *params)={};
-	void (*renderFill)(struct NVGparams *params, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, float fringe, const float* bounds, const NVGpath* paths, int npaths)={};
-	void (*renderStroke)(struct NVGparams *params, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, float fringe, float strokeWidth, const NVGpath* paths, int npaths)={};
-	void (*renderTriangles)(struct NVGparams *params, NVGpaint* paint, NVGcompositeOperationState compositeOperation, NVGscissor* scissor, const NVGvertex* verts, int nverts, float fringe)={};
-	void (*renderDelete)(struct NVGparams *params)={};
 
   NVGdrawData _drawdata={};
   int _flags = {};
@@ -830,7 +823,7 @@ private:
 typedef struct NVGparams NVGparams;
 
 // Constructor and destructor, called by the render back-end.
-NVGcontext* nvgCreate();
+NVGcontext* nvgCreate(int flags);
 void nvgDelete(NVGcontext* ctx);
 
 NVGparams* nvgParams(NVGcontext* ctx);

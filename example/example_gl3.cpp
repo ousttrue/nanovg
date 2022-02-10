@@ -1,7 +1,6 @@
 #include "GlfwApp.h"
 #include "demo.h"
 #include "nanovg.h"
-#include "nanovg_gl.h"
 #include "perf.h"
 #include "renderer.h"
 #include "texture_manager.h"
@@ -53,18 +52,17 @@ int main()
     return 1;
   }
 
-  auto vg = nvgCreate();
-  if (!vg)
-  {
-    return 2;
-  }
-
 #ifdef DEMO_MSAA
   auto flags = NVG_STENCIL_STROKES | NVG_DEBUG;
 #else
   auto flags = NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG;
 #endif
-  nvgInitGL3(vg, flags);
+  auto vg = nvgCreate(flags);
+  if (!vg)
+  {
+    return 2;
+  }
+
   auto params = nvgParams(vg);
   params->renderCreateTexture = glnvg__renderCreateTexture;
   params->renderDeleteTexture = glnvg__renderDeleteTexture;
