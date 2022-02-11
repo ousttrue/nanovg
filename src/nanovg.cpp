@@ -968,9 +968,10 @@ void nvgResetScissor(NVGcontext* ctx) {
 }
 
 // Global composite operation.
-void nvgGlobalCompositeOperation(NVGcontext* ctx, NVGcompositeOperation op) {
+void nvgGlobalCompositeOperation(NVGcontext* ctx, int op) {
     NVGstate* state = nvg__getState(ctx);
-    state->compositeOperation = nvg__compositeOperationState(op);
+    state->compositeOperation =
+        nvg__compositeOperationState(static_cast<NVGcompositeOperation>(op));
 }
 
 void nvgGlobalCompositeBlendFunc(NVGcontext* ctx, int sfactor, int dfactor) {
