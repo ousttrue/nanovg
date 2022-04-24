@@ -19,6 +19,7 @@
 #ifndef NANOVG_H
 #define NANOVG_H
 #include <vector>
+#include <cstddef>
 
 #ifdef __cplusplus
 extern "C" {
